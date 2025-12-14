@@ -71,9 +71,13 @@ public class DisplayConfig {
     // crop_offset_x: 0.0 = left edge, 0.25 = left half center, 0.5 = center, 0.75 = right half center, 1.0 = right edge
     // crop_offset_y: 0.0 = top, 0.5 = center, 1.0 = bottom
     // crop_scale: 1.0 = use full width, 0.5 = use half width (zoom in 2x)
-    public float cropOffsetX = 0.25f;            // Left half of image (for driver side)
+    public float cropOffsetX = 0.0f;             // Left edge (for driver side)
     public float cropOffsetY = 0.5f;             // Vertical center
-    public float cropScale = 0.5f;               // Use half the width (zoom in 2x)
+    public float cropScale = 0.5f;               // Use half the width (left half only)
+    
+    // Face crop settings
+    public float faceCropPadding = 2.0f;         // Padding around face box (2.0 = 2x the box size)
+    public int faceCropDisplaySize = 300;        // Display size for face crop (pixels)
     
     // Singleton instance
     private static DisplayConfig instance = null;
@@ -152,6 +156,10 @@ public class DisplayConfig {
             cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
             cropScale = (float) json.optDouble("crop_scale", cropScale);
             
+            // Face crop settings
+            faceCropPadding = (float) json.optDouble("face_crop_padding", faceCropPadding);
+            faceCropDisplaySize = json.optInt("face_crop_display_size", faceCropDisplaySize);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -173,6 +181,9 @@ public class DisplayConfig {
             Log.i(TAG, "  crop_offset_x: " + cropOffsetX + " (0=left, 0.5=center, 1=right)");
             Log.i(TAG, "  crop_offset_y: " + cropOffsetY + " (0=top, 0.5=center, 1=bottom)");
             Log.i(TAG, "  crop_scale: " + cropScale + " (0.5=half/2x zoom, 1.0=full)");
+            Log.i(TAG, "  --- Face Crop ---");
+            Log.i(TAG, "  face_crop_padding: " + faceCropPadding + "x");
+            Log.i(TAG, "  face_crop_display_size: " + faceCropDisplaySize + "px");
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -210,7 +221,10 @@ public class DisplayConfig {
             writer.println("");
             writer.println("  \"crop_offset_x\": " + cropOffsetX + ",");
             writer.println("  \"crop_offset_y\": " + cropOffsetY + ",");
-            writer.println("  \"crop_scale\": " + cropScale);
+            writer.println("  \"crop_scale\": " + cropScale + ",");
+            writer.println("");
+            writer.println("  \"face_crop_padding\": " + faceCropPadding + ",");
+            writer.println("  \"face_crop_display_size\": " + faceCropDisplaySize);
             writer.println("}");
             
             lastModified = configFile.lastModified();

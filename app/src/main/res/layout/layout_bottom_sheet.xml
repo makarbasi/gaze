@@ -29,57 +29,103 @@
             android:layout_gravity="center"
             android:src="@drawable/icn_chevron_up" />
 
-        <!-- Container for preview image with overlay -->
-        <FrameLayout
+        <!-- Split view: Left half preview + Face crop -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="500dp">
+            android:layout_height="320dp"
+            android:orientation="horizontal"
+            android:weightSum="2">
 
-            <ImageView
-                android:id="@+id/imageView2"
-                android:layout_width="match_parent"
+            <!-- Left side: Region preview (left half of camera) -->
+            <FrameLayout
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                tools:srcCompat="@tools:sample/avatars" />
+                android:layout_weight="1">
 
-            <!-- Gaze status overlay - covers the preview -->
-            <View
-                android:id="@+id/gaze_overlay"
-                android:layout_width="match_parent"
+                <ImageView
+                    android:id="@+id/imageView2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:background="#222222"
+                    tools:srcCompat="@tools:sample/avatars" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|start"
+                    android:padding="4dp"
+                    android:text="Region"
+                    android:textColor="#AAFFFFFF"
+                    android:textSize="10sp"
+                    android:background="#66000000" />
+
+            </FrameLayout>
+
+            <!-- Right side: Face crop (300x300) -->
+            <FrameLayout
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00000000"
-                android:visibility="gone" />
+                android:layout_weight="1">
 
-            <!-- Gaze status text - centered on preview -->
-            <TextView
-                android:id="@+id/gaze_status_text"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="top|center_horizontal"
-                android:layout_marginTop="16dp"
-                android:gravity="center"
-                android:textColor="@android:color/white"
-                android:textSize="22sp"
-                android:textStyle="bold"
-                android:shadowColor="@android:color/black"
-                android:shadowRadius="5"
-                android:shadowDx="2"
-                android:shadowDy="2"
-                android:visibility="gone" />
+                <ImageView
+                    android:id="@+id/faceImageView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:background="#333333"
+                    tools:srcCompat="@tools:sample/avatars" />
 
-            <!-- Calibrate button - top right corner -->
-            <Button
-                android:id="@+id/calibrate_button"
-                android:layout_width="wrap_content"
-                android:layout_height="42dp"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
-                android:text="📍 Calibrate"
-                android:textSize="13sp"
-                android:backgroundTint="#DD2196F3"
-                android:textColor="@android:color/white"
-                android:elevation="4dp" />
+                <!-- Gaze status overlay - covers the face preview -->
+                <View
+                    android:id="@+id/gaze_overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#00000000"
+                    android:visibility="gone" />
 
-        </FrameLayout>
+                <!-- Gaze status text -->
+                <TextView
+                    android:id="@+id/gaze_status_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top|center_horizontal"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center"
+                    android:textColor="@android:color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:shadowColor="@android:color/black"
+                    android:shadowRadius="5"
+                    android:shadowDx="2"
+                    android:shadowDy="2"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|start"
+                    android:padding="4dp"
+                    android:text="Face"
+                    android:textColor="#AAFFFFFF"
+                    android:textSize="10sp"
+                    android:background="#66000000" />
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+        <!-- Calibrate button - below the split view -->
+        <Button
+            android:id="@+id/calibrate_button"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="8dp"
+            android:text="📍 Calibrate"
+            android:textSize="13sp"
+            android:backgroundTint="#DD2196F3"
+            android:textColor="@android:color/white"
+            android:elevation="4dp" />
 
         <LinearLayout
             android:layout_width="match_parent"

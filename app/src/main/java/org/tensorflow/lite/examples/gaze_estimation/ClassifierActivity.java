@@ -95,6 +95,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private float[] face_detection_input = new float[DemoConfig.getFaceDetectionInputsize()];
   private float[] NNoutput = null;
   Bitmap detection = null;
+  Bitmap faceCropBitmap = null;  // High-res face crop for display
   SmootherList smoother_list = null;
   
   // TFLite Face Detector (from HotGaze - more accurate)
@@ -518,6 +519,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     Vector<Mat> tvecs = new Vector<Mat>();
     Vector<Mat> rvecs = new Vector<Mat>();
     Mat camera_matrix = null;
+    
+    // Face crop for display (created from first detected face)
+    Bitmap currentFaceCrop = null;
+    Mat faceCropMat = null;
+    
     // Update face detection status based on TFLite/QNN output
     if (boxes != null && boxes.length != 0) {
       hasFaceDetected = true;  // Face detected by TFLite/QNN
@@ -547,6 +553,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
       for (int b=0;b<boxes.length;b++) {
         float[] box = boxes[b];
+        
+        // Create high-resolution face crop with padding for the first face
+        if (b == 0) {
+          float padding = displayConfig.faceCropPadding;
+          int displaySize = displayConfig.faceCropDisplaySize;
+          currentFaceCrop = extractFaceCrop(processedBitmap, box, padding, displaySize);
+          if (currentFaceCrop != null) {
+            faceCropMat = bitmap2mat(currentFaceCrop);
+          }
+        }
+        
         ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
         float[] landmark_detection_input = landmark_preprocess_result.input;
         
@@ -629,8 +646,37 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       for (float[] landmark : landmarks) {
         drawlandmark(pixs, landmark, DemoConfig.crop_H, DemoConfig.crop_W);
       }
+      
+      // Draw on face crop for display (landmarks relative to face crop)
+      if (currentFaceCrop != null && faceCropMat != null && gazes.size() > 0) {
+        // Draw gaze and landmarks on face crop
+        // We need to transform landmark coordinates to face crop space
+        float[] box = boxes[0];
+        float padding = displayConfig.faceCropPadding;
+        float boxW = box[2] - box[0];
+        float boxH = box[3] - box[1];
+        float cropSize = Math.max(boxW, boxH) * padding;
+        float cropX = box[0] + boxW/2 - cropSize/2;
+        float cropY = box[1] + boxH/2 - cropSize/2;
+        float scale = (float)displayConfig.faceCropDisplaySize / cropSize;
+        
+        // Draw gaze on face crop mat
+        if (landmarks.size() > 0 && gazes.size() > 0) {
+          // Transform landmarks to face crop coordinates
+          float[] origLandmarks = landmarks.elementAt(0);
+          float[] cropLandmarks = new float[origLandmarks.length];
+          for (int i = 0; i < origLandmarks.length / 2; i++) {
+            cropLandmarks[i*2] = (origLandmarks[i*2] - cropX) * scale;
+            cropLandmarks[i*2+1] = (origLandmarks[i*2+1] - cropY) * scale;
+          }
+          drawgaze(faceCropMat, gazes.elementAt(0), cropLandmarks);
+        }
+        Utils.matToBitmap(faceCropMat, currentFaceCrop);
+        faceCropBitmap = currentFaceCrop;
+      }
     } else {
       processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+      faceCropBitmap = null;  // No face detected
     }
 
     //transpose
@@ -661,22 +707,37 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 final float detectionScaleX = displayConfig.detectionScaleX;
                 final float detectionScaleY = displayConfig.detectionScaleY;
                 
+                // Capture face crop for display
+                final Bitmap faceCropToDisplay = faceCropBitmap;
+                
                 // Log every 30 frames to avoid spam
                 if (System.currentTimeMillis() % 1000 < 50) {
                     Log.i("DisplayConfig", "APPLYING detection: rotation=" + detectionRotation + 
-                        ", scaleX=" + detectionScaleX + ", scaleY=" + detectionScaleY);
+                        ", scaleX=" + detectionScaleX + ", scaleY=" + detectionScaleY +
+                        ", faceCrop=" + (faceCropToDisplay != null ? "yes" : "no"));
                 }
                 
                 runOnUiThread(
                         new Runnable() {
                           @Override
                           public void run() {
+                            // Region preview (left half)
                             ImageView imageView = (ImageView) findViewById(R.id.imageView2);
-                            // Apply rotation and scale from config file
                             imageView.setRotation(detectionRotation);
                             imageView.setScaleX(detectionScaleX);
                             imageView.setScaleY(detectionScaleY);
                             imageView.setImageBitmap(detection);
+                            
+                            // Face crop preview
+                            ImageView faceView = (ImageView) findViewById(R.id.faceImageView);
+                            if (faceView != null) {
+                              if (faceCropToDisplay != null) {
+                                faceView.setImageBitmap(faceCropToDisplay);
+                              } else {
+                                // No face detected - show placeholder or clear
+                                faceView.setImageBitmap(null);
+                              }
+                            }
                           }
                         });
 //                bitmapset = 1;
@@ -849,6 +910,65 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       classifier = Classifier.create(this, model, device, numThreads);
     } catch (IOException e) {
       LOGGER.e(e, "Failed to create classifier.");
+    }
+  }
+  
+  /**
+   * Extract a face crop from the source bitmap with padding
+   * 
+   * @param source Source bitmap
+   * @param box Face bounding box [x1, y1, x2, y2]
+   * @param padding Padding multiplier (2.0 = 2x the box size)
+   * @param displaySize Target size for the crop
+   * @return Face crop bitmap scaled to displaySize
+   */
+  private Bitmap extractFaceCrop(Bitmap source, float[] box, float padding, int displaySize) {
+    try {
+      int srcW = source.getWidth();
+      int srcH = source.getHeight();
+      
+      // Calculate box dimensions
+      float boxX1 = box[0];
+      float boxY1 = box[1];
+      float boxX2 = box[2];
+      float boxY2 = box[3];
+      float boxW = boxX2 - boxX1;
+      float boxH = boxY2 - boxY1;
+      
+      // Calculate crop size with padding (square crop)
+      float cropSize = Math.max(boxW, boxH) * padding;
+      
+      // Calculate crop center (center of face box)
+      float centerX = boxX1 + boxW / 2;
+      float centerY = boxY1 + boxH / 2;
+      
+      // Calculate crop region
+      int cropX = (int)(centerX - cropSize / 2);
+      int cropY = (int)(centerY - cropSize / 2);
+      int cropW = (int)cropSize;
+      int cropH = (int)cropSize;
+      
+      // Clamp to image bounds
+      cropX = Math.max(0, cropX);
+      cropY = Math.max(0, cropY);
+      if (cropX + cropW > srcW) cropW = srcW - cropX;
+      if (cropY + cropH > srcH) cropH = srcH - cropY;
+      
+      // Ensure minimum size
+      if (cropW < 10 || cropH < 10) {
+        return null;
+      }
+      
+      // Extract the crop
+      Bitmap crop = Bitmap.createBitmap(source, cropX, cropY, cropW, cropH);
+      
+      // Scale to display size
+      Bitmap scaled = Bitmap.createScaledBitmap(crop, displaySize, displaySize, true);
+      
+      return scaled;
+    } catch (Exception e) {
+      LOGGER.e(e, "Failed to extract face crop");
+      return null;
     }
   }
   

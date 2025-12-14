@@ -25,7 +25,17 @@ import java.io.PrintWriter;
  *   "preview_scale_y": 1.0,        // TextureView Y scale (use -1 to flip vertically)
  *   "detection_scale_x": 1.0,      // ImageView X scale
  *   "detection_scale_y": 1.0,      // ImageView Y scale
- *   "img_orientation": 90          // Transformation matrix rotation for cropping
+ *   "img_orientation": 90,         // Transformation matrix rotation for cropping
+ *   
+ *   // Fisheye camera settings (for OX05B1S 200° lens)
+ *   "fisheye_enabled": true,       // Enable fisheye undistortion
+ *   "fisheye_strength": 0.5,       // Undistortion strength (0.0-1.0, higher = more correction)
+ *   "fisheye_zoom": 1.5,           // Zoom factor after undistortion (1.0 = no zoom)
+ *   
+ *   // Face detection tuning (for fisheye/wide-angle)
+ *   "face_detection_threshold": 0.3,  // Lower = more sensitive (0.1-0.9)
+ *   "min_face_size": 15,              // Minimum face size in pixels (smaller for fisheye)
+ *   "face_scale_factor": 1.5          // Scale up detected face box for better landmark detection
  * }
  * 
  * Common rotation values:
@@ -38,7 +48,7 @@ public class DisplayConfig {
     private static final String TAG = "DisplayConfig";
     public static final String CONFIG_PATH = "/data/local/tmp/display_config.json";
     
-    // Default values
+    // Default values - Display
     public float previewRotation = -90f;      // Main preview rotation
     public float detectionRotation = 90f;     // Detection/landmark display rotation
     public float previewScaleX = 1.0f;        // Preview horizontal scale (-1 to flip)
@@ -46,6 +56,16 @@ public class DisplayConfig {
     public float detectionScaleX = 1.0f;      // Detection horizontal scale
     public float detectionScaleY = 1.0f;      // Detection vertical scale
     public int imgOrientation = 90;           // Crop transformation rotation
+    
+    // Fisheye camera settings
+    public boolean fisheyeEnabled = false;    // Enable fisheye undistortion
+    public float fisheyeStrength = 0.5f;      // Undistortion strength (0.0-1.0)
+    public float fisheyeZoom = 1.5f;          // Zoom factor after undistortion
+    
+    // Face detection tuning
+    public float faceDetectionThreshold = 0.3f;  // Lower for fisheye (default 0.5)
+    public int minFaceSize = 15;                 // Smaller for fisheye (default 30)
+    public float faceScaleFactor = 1.5f;         // Scale up face box for landmarks
     
     // Singleton instance
     private static DisplayConfig instance = null;
@@ -109,6 +129,16 @@ public class DisplayConfig {
             detectionScaleY = (float) json.optDouble("detection_scale_y", detectionScaleY);
             imgOrientation = json.optInt("img_orientation", imgOrientation);
             
+            // Fisheye settings
+            fisheyeEnabled = json.optBoolean("fisheye_enabled", fisheyeEnabled);
+            fisheyeStrength = (float) json.optDouble("fisheye_strength", fisheyeStrength);
+            fisheyeZoom = (float) json.optDouble("fisheye_zoom", fisheyeZoom);
+            
+            // Face detection tuning
+            faceDetectionThreshold = (float) json.optDouble("face_detection_threshold", faceDetectionThreshold);
+            minFaceSize = json.optInt("min_face_size", minFaceSize);
+            faceScaleFactor = (float) json.optDouble("face_scale_factor", faceScaleFactor);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -118,6 +148,14 @@ public class DisplayConfig {
             Log.i(TAG, "  detection_scale_x: " + detectionScaleX);
             Log.i(TAG, "  detection_scale_y: " + detectionScaleY);
             Log.i(TAG, "  img_orientation: " + imgOrientation);
+            Log.i(TAG, "  --- Fisheye Settings ---");
+            Log.i(TAG, "  fisheye_enabled: " + fisheyeEnabled);
+            Log.i(TAG, "  fisheye_strength: " + fisheyeStrength);
+            Log.i(TAG, "  fisheye_zoom: " + fisheyeZoom);
+            Log.i(TAG, "  --- Face Detection ---");
+            Log.i(TAG, "  face_detection_threshold: " + faceDetectionThreshold);
+            Log.i(TAG, "  min_face_size: " + minFaceSize);
+            Log.i(TAG, "  face_scale_factor: " + faceScaleFactor);
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -135,15 +173,6 @@ public class DisplayConfig {
         File configFile = new File(CONFIG_PATH);
         
         try (PrintWriter writer = new PrintWriter(new FileWriter(configFile))) {
-            JSONObject json = new JSONObject();
-            json.put("preview_rotation", previewRotation);
-            json.put("detection_rotation", detectionRotation);
-            json.put("preview_scale_x", previewScaleX);
-            json.put("preview_scale_y", previewScaleY);
-            json.put("detection_scale_x", detectionScaleX);
-            json.put("detection_scale_y", detectionScaleY);
-            json.put("img_orientation", imgOrientation);
-            
             // Write with nice formatting
             writer.println("{");
             writer.println("  \"preview_rotation\": " + previewRotation + ",");
@@ -152,7 +181,15 @@ public class DisplayConfig {
             writer.println("  \"preview_scale_y\": " + previewScaleY + ",");
             writer.println("  \"detection_scale_x\": " + detectionScaleX + ",");
             writer.println("  \"detection_scale_y\": " + detectionScaleY + ",");
-            writer.println("  \"img_orientation\": " + imgOrientation);
+            writer.println("  \"img_orientation\": " + imgOrientation + ",");
+            writer.println("");
+            writer.println("  \"fisheye_enabled\": " + fisheyeEnabled + ",");
+            writer.println("  \"fisheye_strength\": " + fisheyeStrength + ",");
+            writer.println("  \"fisheye_zoom\": " + fisheyeZoom + ",");
+            writer.println("");
+            writer.println("  \"face_detection_threshold\": " + faceDetectionThreshold + ",");
+            writer.println("  \"min_face_size\": " + minFaceSize + ",");
+            writer.println("  \"face_scale_factor\": " + faceScaleFactor);
             writer.println("}");
             
             lastModified = configFile.lastModified();

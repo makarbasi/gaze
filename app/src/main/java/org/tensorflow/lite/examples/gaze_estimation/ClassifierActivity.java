@@ -440,13 +440,29 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
     float[][] boxes = null;
     
+    // ==== APPLY FISHEYE CORRECTION AND UPDATE DETECTION SETTINGS ====
+    DisplayConfig displayConfig = DisplayConfig.getInstance();
+    displayConfig.checkAndReload();
+    
+    // Apply fisheye undistortion if enabled
+    Bitmap processedBitmap = croppedBitmap;
+    if (displayConfig.fisheyeEnabled) {
+      processedBitmap = applyFisheyeCorrection(croppedBitmap, displayConfig.fisheyeStrength, displayConfig.fisheyeZoom);
+    }
+    
+    // Update face detection settings from config
+    if (tfliteFaceDetector != null) {
+      tfliteFaceDetector.setFaceDetectionThreshold(displayConfig.faceDetectionThreshold);
+      tfliteFaceDetector.setMinFaceSize(displayConfig.minFaceSize);
+    }
+    
     // ==== FACE DETECTION ====
     if (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) {
       // Use TFLite Face Detector (from HotGaze - more accurate model)
       inferStartTime = SystemClock.uptimeMillis();
-      boxes = tfliteFaceDetector.detectFaces(croppedBitmap);
+      boxes = tfliteFaceDetector.detectFaces(processedBitmap);
       inferencetime += SystemClock.uptimeMillis() - inferStartTime;
-      Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces");
+      Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
     } else {
       // Fallback to QNN face detection (DLC model)
       DetectionUtils.scaleResult scale_result = scale(croppedBitmap, DemoConfig.face_detection_input_W, DemoConfig.face_detection_input_H);
@@ -811,6 +827,73 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       classifier = Classifier.create(this, model, device, numThreads);
     } catch (IOException e) {
       LOGGER.e(e, "Failed to create classifier.");
+    }
+  }
+  
+  /**
+   * Apply fisheye lens correction to the image
+   * This helps with face detection accuracy on wide-angle/fisheye cameras like OX05B1S
+   * 
+   * @param input Input bitmap with fisheye distortion
+   * @param strength Correction strength (0.0 = no correction, 1.0 = full correction)
+   * @param zoom Zoom factor after correction (1.0 = no zoom, >1.0 = zoom in)
+   * @return Corrected bitmap
+   */
+  private Bitmap applyFisheyeCorrection(Bitmap input, float strength, float zoom) {
+    if (strength <= 0) {
+      return input;
+    }
+    
+    try {
+      Mat src = new Mat();
+      Utils.bitmapToMat(input, src);
+      
+      int width = src.cols();
+      int height = src.rows();
+      float cx = width / 2.0f;
+      float cy = height / 2.0f;
+      
+      // Create camera matrix (approximate for fisheye)
+      float focalLength = Math.min(width, height) * 0.8f;
+      Mat cameraMatrix = Mat.eye(3, 3, org.opencv.core.CvType.CV_64F);
+      cameraMatrix.put(0, 0, focalLength);
+      cameraMatrix.put(1, 1, focalLength);
+      cameraMatrix.put(0, 2, cx);
+      cameraMatrix.put(1, 2, cy);
+      
+      // Create distortion coefficients (barrel distortion for fisheye)
+      // k1, k2, p1, p2, k3 - negative values for barrel distortion
+      Mat distCoeffs = Mat.zeros(4, 1, org.opencv.core.CvType.CV_64F);
+      float k = -strength * 0.3f;  // Scale strength to reasonable distortion values
+      distCoeffs.put(0, 0, k);     // k1
+      distCoeffs.put(1, 0, k * 0.5f);  // k2
+      distCoeffs.put(2, 0, 0);     // p1
+      distCoeffs.put(3, 0, 0);     // p2
+      
+      // Create new camera matrix with zoom
+      Mat newCameraMatrix = cameraMatrix.clone();
+      newCameraMatrix.put(0, 0, focalLength * zoom);
+      newCameraMatrix.put(1, 1, focalLength * zoom);
+      
+      // Apply undistortion
+      Mat dst = new Mat();
+      org.opencv.calib3d.Calib3d.undistort(src, dst, cameraMatrix, distCoeffs, newCameraMatrix);
+      
+      // Convert back to bitmap
+      Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+      Utils.matToBitmap(dst, result);
+      
+      // Cleanup
+      src.release();
+      dst.release();
+      cameraMatrix.release();
+      distCoeffs.release();
+      newCameraMatrix.release();
+      
+      return result;
+    } catch (Exception e) {
+      LOGGER.e(e, "Fisheye correction failed");
+      return input;
     }
   }
 }

@@ -79,11 +79,15 @@ public class DisplayConfig {
     public float faceCropPadding = 2.0f;         // Padding around face box (2.0 = 2x the box size)
     public int faceCropDisplaySize = 300;        // Display size for face crop (pixels)
     
-    // Gaze detection thresholds (in radians, ~0.17 rad = 10°)
-    public float gazePitchThreshold = 0.25f;     // Pitch threshold (~14°) - looking up/down
-    public float gazeYawThreshold = 0.35f;       // Yaw threshold (~20°) - looking left/right
-    public boolean gazePitchOnly = false;        // If true, only use pitch for detection (ignore yaw)
-    public int gazeConsecutiveFrames = 3;        // Consecutive frames needed to change state
+    // Gaze detection thresholds (in DEGREES - matches display values!)
+    public float gazePitchThresholdDegrees = 15f;   // Pitch threshold in degrees - looking up/down
+    public float gazeYawThresholdDegrees = 20f;     // Yaw threshold in degrees - looking left/right
+    public boolean gazePitchOnly = false;           // If true, only use pitch for detection (ignore yaw)
+    public int gazeConsecutiveFrames = 3;           // Consecutive frames needed to change state
+    
+    // Computed thresholds in radians (for internal use)
+    public float gazePitchThreshold = (float) Math.toRadians(15);
+    public float gazeYawThreshold = (float) Math.toRadians(20);
     
     // Smoothing parameters for 1-Euro filter (lower values = more smoothing, less reactive)
     // min_cutoff: Minimum cutoff frequency (Hz). Lower = smoother but more lag
@@ -180,9 +184,12 @@ public class DisplayConfig {
             faceCropPadding = (float) json.optDouble("face_crop_padding", faceCropPadding);
             faceCropDisplaySize = json.optInt("face_crop_display_size", faceCropDisplaySize);
             
-            // Gaze detection thresholds
-            gazePitchThreshold = (float) json.optDouble("gaze_pitch_threshold", gazePitchThreshold);
-            gazeYawThreshold = (float) json.optDouble("gaze_yaw_threshold", gazeYawThreshold);
+            // Gaze detection thresholds (read in DEGREES, convert to radians internally)
+            gazePitchThresholdDegrees = (float) json.optDouble("gaze_pitch_threshold", gazePitchThresholdDegrees);
+            gazeYawThresholdDegrees = (float) json.optDouble("gaze_yaw_threshold", gazeYawThresholdDegrees);
+            // Convert to radians for internal use
+            gazePitchThreshold = (float) Math.toRadians(gazePitchThresholdDegrees);
+            gazeYawThreshold = (float) Math.toRadians(gazeYawThresholdDegrees);
             gazePitchOnly = json.optBoolean("gaze_pitch_only", gazePitchOnly);
             gazeConsecutiveFrames = json.optInt("gaze_consecutive_frames", gazeConsecutiveFrames);
             
@@ -220,8 +227,8 @@ public class DisplayConfig {
             Log.i(TAG, "  face_crop_padding: " + faceCropPadding + "x");
             Log.i(TAG, "  face_crop_display_size: " + faceCropDisplaySize + "px");
             Log.i(TAG, "  --- Gaze Detection ---");
-            Log.i(TAG, "  gaze_pitch_threshold: " + gazePitchThreshold + " rad (" + Math.toDegrees(gazePitchThreshold) + "°)");
-            Log.i(TAG, "  gaze_yaw_threshold: " + gazeYawThreshold + " rad (" + Math.toDegrees(gazeYawThreshold) + "°)");
+            Log.i(TAG, "  gaze_pitch_threshold: " + gazePitchThresholdDegrees + "° (config uses DEGREES now!)");
+            Log.i(TAG, "  gaze_yaw_threshold: " + gazeYawThresholdDegrees + "°");
             Log.i(TAG, "  gaze_pitch_only: " + gazePitchOnly);
             Log.i(TAG, "  gaze_consecutive_frames: " + gazeConsecutiveFrames);
             Log.i(TAG, "  --- Smoothing (1-Euro Filter) ---");
@@ -274,8 +281,8 @@ public class DisplayConfig {
             writer.println("  \"face_crop_padding\": " + faceCropPadding + ",");
             writer.println("  \"face_crop_display_size\": " + faceCropDisplaySize + ",");
             writer.println("");
-            writer.println("  \"gaze_pitch_threshold\": " + gazePitchThreshold + ",");
-            writer.println("  \"gaze_yaw_threshold\": " + gazeYawThreshold + ",");
+            writer.println("  \"gaze_pitch_threshold\": " + gazePitchThresholdDegrees + ",");
+            writer.println("  \"gaze_yaw_threshold\": " + gazeYawThresholdDegrees + ",");
             writer.println("  \"gaze_pitch_only\": " + gazePitchOnly + ",");
             writer.println("  \"gaze_consecutive_frames\": " + gazeConsecutiveFrames + ",");
             writer.println("");

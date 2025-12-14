@@ -64,9 +64,14 @@ public class DisplayConfig {
      */
     public void checkAndReload() {
         File configFile = new File(CONFIG_PATH);
-        if (configFile.exists() && configFile.lastModified() > lastModified) {
-            Log.i(TAG, "Config file modified, reloading...");
-            load();
+        if (configFile.exists()) {
+            long currentModified = configFile.lastModified();
+            if (currentModified > lastModified) {
+                Log.i(TAG, "Config file modified (was: " + lastModified + ", now: " + currentModified + "), reloading...");
+                load();
+            }
+        } else {
+            Log.w(TAG, "Config file does not exist at: " + CONFIG_PATH);
         }
     }
     
@@ -91,7 +96,10 @@ public class DisplayConfig {
                 jsonBuilder.append(line);
             }
             
-            JSONObject json = new JSONObject(jsonBuilder.toString());
+            String jsonString = jsonBuilder.toString();
+            Log.i(TAG, "Raw JSON content: " + jsonString);
+            
+            JSONObject json = new JSONObject(jsonString);
             
             previewRotation = (float) json.optDouble("preview_rotation", previewRotation);
             detectionRotation = (float) json.optDouble("detection_rotation", detectionRotation);

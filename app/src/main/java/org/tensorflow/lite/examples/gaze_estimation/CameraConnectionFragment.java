@@ -528,8 +528,12 @@ public class CameraConnectionFragment extends Fragment {
     textureView.setRotation(displayConfig.previewRotation);
     textureView.setScaleX(displayConfig.previewScaleX);
     textureView.setScaleY(displayConfig.previewScaleY);
-    LOGGER.i("Preview rotation: %.1f, scaleX: %.1f, scaleY: %.1f", 
-        displayConfig.previewRotation, displayConfig.previewScaleX, displayConfig.previewScaleY);
+    LOGGER.i("════════════════════════════════════════");
+    LOGGER.i("APPLYING PREVIEW CONFIG:");
+    LOGGER.i("  preview_rotation: %.1f", displayConfig.previewRotation);
+    LOGGER.i("  preview_scale_x: %.1f", displayConfig.previewScaleX);
+    LOGGER.i("  preview_scale_y: %.1f", displayConfig.previewScaleY);
+    LOGGER.i("════════════════════════════════════════");
   }
 
   /**

@@ -623,6 +623,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 final float detectionScaleX = displayConfig.detectionScaleX;
                 final float detectionScaleY = displayConfig.detectionScaleY;
                 
+                // Log every 30 frames to avoid spam
+                if (System.currentTimeMillis() % 1000 < 50) {
+                    Log.i("DisplayConfig", "APPLYING detection: rotation=" + detectionRotation + 
+                        ", scaleX=" + detectionScaleX + ", scaleY=" + detectionScaleY);
+                }
+                
                 runOnUiThread(
                         new Runnable() {
                           @Override

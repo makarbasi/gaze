@@ -422,18 +422,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     Bitmap regionBitmap = extractRegion(rgbFrameBitmap, 
         cropConfig.cropOffsetX, cropConfig.cropOffsetY, cropConfig.cropScale);
     
-    //transform and crop the frame
+    //transform and crop the frame using ImageUtils with proper rotation
     final Canvas canvas = new Canvas(croppedBitmap);
-    // Use a simple scale transform for the extracted region
-    Matrix regionToCropTransform = new Matrix();
-    float scaleX = (float) DemoConfig.crop_W / regionBitmap.getWidth();
-    float scaleY = (float) DemoConfig.crop_H / regionBitmap.getHeight();
-    float scale = Math.max(scaleX, scaleY);
-    regionToCropTransform.postScale(scale, scale);
-    // Center the scaled image
-    float dx = (DemoConfig.crop_W - regionBitmap.getWidth() * scale) / 2;
-    float dy = (DemoConfig.crop_H - regionBitmap.getHeight() * scale) / 2;
-    regionToCropTransform.postTranslate(dx, dy);
+    
+    // Create transformation matrix with rotation from config (img_orientation)
+    Matrix regionToCropTransform = ImageUtils.getTransformationMatrix(
+        regionBitmap.getWidth(),
+        regionBitmap.getHeight(),
+        DemoConfig.crop_W,
+        DemoConfig.crop_H,
+        cropConfig.imgOrientation,
+        MAINTAIN_ASPECT);
     
     canvas.drawBitmap(regionBitmap, regionToCropTransform, null);
 

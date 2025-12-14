@@ -261,13 +261,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         Bitmap.createBitmap(
                 DemoConfig.crop_W, DemoConfig.crop_H, Config.ARGB_8888);
 
+    // Use img_orientation from display config (can be modified at runtime via /data/local/tmp/display_config.json)
+    DisplayConfig displayConfig = DisplayConfig.getInstance();
+    LOGGER.i("Using img_orientation from config: %d", displayConfig.imgOrientation);
+    
     frameToCropTransform =
         ImageUtils.getTransformationMatrix(
             previewWidth,
             previewHeight,
             DemoConfig.crop_W,
             DemoConfig.crop_H,
-            DemoConfig.img_orientation,
+            displayConfig.imgOrientation,
             MAINTAIN_ASPECT);
 
 
@@ -612,13 +616,22 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
               cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
 
               if (bitmapset == 0){
+                // Check if config file has been modified and reload
+                DisplayConfig displayConfig = DisplayConfig.getInstance();
+                displayConfig.checkAndReload();
+                final float detectionRotation = displayConfig.detectionRotation;
+                final float detectionScaleX = displayConfig.detectionScaleX;
+                final float detectionScaleY = displayConfig.detectionScaleY;
+                
                 runOnUiThread(
                         new Runnable() {
                           @Override
                           public void run() {
                             ImageView imageView = (ImageView) findViewById(R.id.imageView2);
-                            // Rotate 90° CW to fix CCW rotation issue with OX05B1S sensor
-                            imageView.setRotation(90);
+                            // Apply rotation and scale from config file
+                            imageView.setRotation(detectionRotation);
+                            imageView.setScaleX(detectionScaleX);
+                            imageView.setScaleY(detectionScaleY);
                             imageView.setImageBitmap(detection);
                           }
                         });

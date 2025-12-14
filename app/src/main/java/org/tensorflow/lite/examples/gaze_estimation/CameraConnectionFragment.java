@@ -523,9 +523,13 @@ public class CameraConnectionFragment extends Fragment {
     }
     textureView.setTransform(matrix);
     
-    // For automotive cameras (like OX05B1S), apply additional rotation to fix preview
-    // Main preview is 90° CW rotated, so rotate the view -90° (CCW) to compensate
-    textureView.setRotation(-90);
+    // Apply rotation and scale from config file (/data/local/tmp/display_config.json)
+    DisplayConfig displayConfig = DisplayConfig.getInstance();
+    textureView.setRotation(displayConfig.previewRotation);
+    textureView.setScaleX(displayConfig.previewScaleX);
+    textureView.setScaleY(displayConfig.previewScaleY);
+    LOGGER.i("Preview rotation: %.1f, scaleX: %.1f, scaleY: %.1f", 
+        displayConfig.previewRotation, displayConfig.previewScaleX, displayConfig.previewScaleY);
   }
 
   /**

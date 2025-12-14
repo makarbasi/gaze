@@ -108,6 +108,48 @@ public class DrawUtils {
         Point pt1 = new Point(eye_pos);
         Point pt2 = new Point(eye_pos[0] + dx, eye_pos[1] + dy);
         Imgproc.arrowedLine(img, pt1, pt2, new Scalar(0, 0, 0, 255), thickness);
+        
+        // Draw pitch and yaw values on the image
+        drawPitchYawText(img, pitchyaw[0], pitchyaw[1]);
+    }
+    
+    /**
+     * Draw pitch and yaw values as text overlay on the image
+     * @param img The image to draw on
+     * @param pitch Pitch value in radians
+     * @param yaw Yaw value in radians
+     */
+    public static void drawPitchYawText(Mat img, float pitch, float yaw) {
+        // Convert to degrees for display
+        double pitchDeg = Math.toDegrees(pitch);
+        double yawDeg = Math.toDegrees(yaw);
+        
+        // Format strings
+        String pitchStr = String.format("Pitch: %.1f", pitchDeg);
+        String yawStr = String.format("Yaw: %.1f", yawDeg);
+        
+        // Text settings
+        int fontFace = Imgproc.FONT_HERSHEY_SIMPLEX;
+        double fontScale = 1.0;
+        int textThickness = 2;
+        Scalar textColor = new Scalar(0, 255, 255, 255);  // Yellow (BGR)
+        Scalar bgColor = new Scalar(0, 0, 0, 255);        // Black background
+        
+        // Position for text (top-left corner with padding)
+        int padding = 20;
+        int lineHeight = 35;
+        
+        // Draw background rectangles for better visibility
+        Point pitchPos = new Point(padding, padding + lineHeight);
+        Point yawPos = new Point(padding, padding + lineHeight * 2);
+        
+        // Draw text with black outline for visibility
+        // Outline
+        Imgproc.putText(img, pitchStr, pitchPos, fontFace, fontScale, bgColor, textThickness + 2);
+        Imgproc.putText(img, yawStr, yawPos, fontFace, fontScale, bgColor, textThickness + 2);
+        // Main text
+        Imgproc.putText(img, pitchStr, pitchPos, fontFace, fontScale, textColor, textThickness);
+        Imgproc.putText(img, yawStr, yawPos, fontFace, fontScale, textColor, textThickness);
     }
     public static void drawheadpose(Mat img, Mat rvec, Mat tvec, Mat camera_matrix) {
         Point3 x = new Point3(50, 0, 0);

@@ -758,29 +758,40 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 smoothedYaw = alpha * displayYaw + (1 - alpha) * smoothedYaw;
               }
               
-              // Check if looking at camera with adaptive threshold
-              // Uses threshold values from config file
+              // Check if looking at camera using thresholds from display_config.json
+              // Get thresholds from DisplayConfig (can be modified at runtime)
+              DisplayConfig gazeThresholds = DisplayConfig.getInstance();
               boolean currentFrameLooking = false;
               if (calibrated && displayGaze) {
                 float pitchDiff = Math.abs(smoothedPitch - refPitch);
                 float yawDiff = Math.abs(smoothedYaw - refYaw);
                 
-                // Use adaptive threshold from config - more tolerant overall to handle head movement
-                float thresholdBase = gazeConfig.thresholdBase;
-                float thresholdMax = gazeConfig.thresholdMax;
-                float threshold = thresholdBase;
+                // Use separate thresholds for pitch and yaw
+                float pitchThreshold = gazeThresholds.gazePitchThreshold;
+                float yawThreshold = gazeThresholds.gazeYawThreshold;
+                boolean pitchOnly = gazeThresholds.gazePitchOnly;
                 
-                // If one axis is close, be more lenient on the other (natural compensation)
-                if (pitchDiff < thresholdBase || yawDiff < thresholdBase) {
-                  threshold = thresholdMax;
+                // Log for debugging (every ~1 second)
+                if (System.currentTimeMillis() % 1000 < 50) {
+                  Log.i("GazeDetect", String.format(
+                    "Pitch: %.1f° (diff: %.1f°, thr: %.1f°) | Yaw: %.1f° (diff: %.1f°, thr: %.1f°) | PitchOnly: %s",
+                    Math.toDegrees(smoothedPitch), Math.toDegrees(pitchDiff), Math.toDegrees(pitchThreshold),
+                    Math.toDegrees(smoothedYaw), Math.toDegrees(yawDiff), Math.toDegrees(yawThreshold),
+                    pitchOnly ? "YES" : "NO"));
                 }
                 
-                currentFrameLooking = (pitchDiff < threshold) && (yawDiff < threshold);
+                // Determine if looking at camera
+                if (pitchOnly) {
+                  // Only use pitch for detection (for when face is toward camera)
+                  currentFrameLooking = (pitchDiff < pitchThreshold);
+                } else {
+                  // Use both pitch and yaw
+                  currentFrameLooking = (pitchDiff < pitchThreshold) && (yawDiff < yawThreshold);
+                }
               }
               
               // Temporal smoothing - require consecutive frames to change state
-              // Uses smoothing_frames from config file
-              int smoothingFrames = gazeConfig.smoothingFrames;
+              int smoothingFrames = gazeThresholds.gazeConsecutiveFrames;
               if (currentFrameLooking) {
                 lookingAtCameraCount++;
                 notLookingAtCameraCount = 0;

@@ -79,6 +79,12 @@ public class DisplayConfig {
     public float faceCropPadding = 2.0f;         // Padding around face box (2.0 = 2x the box size)
     public int faceCropDisplaySize = 300;        // Display size for face crop (pixels)
     
+    // Gaze detection thresholds (in radians, ~0.17 rad = 10°)
+    public float gazePitchThreshold = 0.25f;     // Pitch threshold (~14°) - looking up/down
+    public float gazeYawThreshold = 0.35f;       // Yaw threshold (~20°) - looking left/right
+    public boolean gazePitchOnly = false;        // If true, only use pitch for detection (ignore yaw)
+    public int gazeConsecutiveFrames = 3;        // Consecutive frames needed to change state
+    
     // Singleton instance
     private static DisplayConfig instance = null;
     private long lastModified = 0;
@@ -160,6 +166,12 @@ public class DisplayConfig {
             faceCropPadding = (float) json.optDouble("face_crop_padding", faceCropPadding);
             faceCropDisplaySize = json.optInt("face_crop_display_size", faceCropDisplaySize);
             
+            // Gaze detection thresholds
+            gazePitchThreshold = (float) json.optDouble("gaze_pitch_threshold", gazePitchThreshold);
+            gazeYawThreshold = (float) json.optDouble("gaze_yaw_threshold", gazeYawThreshold);
+            gazePitchOnly = json.optBoolean("gaze_pitch_only", gazePitchOnly);
+            gazeConsecutiveFrames = json.optInt("gaze_consecutive_frames", gazeConsecutiveFrames);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -184,6 +196,11 @@ public class DisplayConfig {
             Log.i(TAG, "  --- Face Crop ---");
             Log.i(TAG, "  face_crop_padding: " + faceCropPadding + "x");
             Log.i(TAG, "  face_crop_display_size: " + faceCropDisplaySize + "px");
+            Log.i(TAG, "  --- Gaze Detection ---");
+            Log.i(TAG, "  gaze_pitch_threshold: " + gazePitchThreshold + " rad (" + Math.toDegrees(gazePitchThreshold) + "°)");
+            Log.i(TAG, "  gaze_yaw_threshold: " + gazeYawThreshold + " rad (" + Math.toDegrees(gazeYawThreshold) + "°)");
+            Log.i(TAG, "  gaze_pitch_only: " + gazePitchOnly);
+            Log.i(TAG, "  gaze_consecutive_frames: " + gazeConsecutiveFrames);
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -224,7 +241,12 @@ public class DisplayConfig {
             writer.println("  \"crop_scale\": " + cropScale + ",");
             writer.println("");
             writer.println("  \"face_crop_padding\": " + faceCropPadding + ",");
-            writer.println("  \"face_crop_display_size\": " + faceCropDisplaySize);
+            writer.println("  \"face_crop_display_size\": " + faceCropDisplaySize + ",");
+            writer.println("");
+            writer.println("  \"gaze_pitch_threshold\": " + gazePitchThreshold + ",");
+            writer.println("  \"gaze_yaw_threshold\": " + gazeYawThreshold + ",");
+            writer.println("  \"gaze_pitch_only\": " + gazePitchOnly + ",");
+            writer.println("  \"gaze_consecutive_frames\": " + gazeConsecutiveFrames);
             writer.println("}");
             
             lastModified = configFile.lastModified();

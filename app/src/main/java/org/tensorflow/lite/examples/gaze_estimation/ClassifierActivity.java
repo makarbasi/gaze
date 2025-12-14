@@ -468,11 +468,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Update smoother parameters from config (allows runtime tuning)
     smoother_list.updateSmoothingParams();
     
-    // Apply fisheye undistortion if enabled
+    // NOTE: Fisheye correction is now applied AFTER face detection, only to the face region
+    // This is more efficient: ~112x112 pixels vs 480x480 (18x fewer pixels!)
     Bitmap processedBitmap = croppedBitmap;
-    if (displayConfig.fisheyeEnabled) {
-      processedBitmap = applyFisheyeCorrection(croppedBitmap, displayConfig.fisheyeStrength, displayConfig.fisheyeZoom);
-    }
     
     // Update face detection settings from config
     if (tfliteFaceDetector != null) {
@@ -567,7 +565,18 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           }
         }
         
+        // Preprocess face for landmark detection
+        // If fisheye enabled, correction is applied to the 112x112 face crop (much faster than 480x480!)
         ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
+        
+        // Apply fisheye correction to the face crop if enabled
+        if (displayConfig.fisheyeEnabled) {
+          // The landmark input is a 112x112x3 float array, convert to bitmap, correct, convert back
+          Bitmap faceCropForCorrection = floatArrayToBitmap(landmark_preprocess_result.input, 112, 112);
+          Bitmap correctedFaceCrop = applyFisheyeCorrection(faceCropForCorrection, displayConfig.fisheyeStrength, displayConfig.fisheyeZoom);
+          landmark_preprocess_result.input = bitmapToFloatArray(correctedFaceCrop);
+        }
+        
         float[] landmark_detection_input = landmark_preprocess_result.input;
         
         // ==== LANDMARK DETECTION with QNN ====
@@ -1031,8 +1040,48 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   }
   
   /**
+   * Convert float array (RGB normalized 0-1) to Bitmap
+   * Used for applying image processing to model input
+   */
+  private Bitmap floatArrayToBitmap(float[] data, int width, int height) {
+    int[] pixels = new int[width * height];
+    for (int i = 0; i < pixels.length; i++) {
+      int r = (int) (data[i * 3] * 255);
+      int g = (int) (data[i * 3 + 1] * 255);
+      int b = (int) (data[i * 3 + 2] * 255);
+      r = Math.max(0, Math.min(255, r));
+      g = Math.max(0, Math.min(255, g));
+      b = Math.max(0, Math.min(255, b));
+      pixels[i] = 0xFF000000 | (r << 16) | (g << 8) | b;
+    }
+    Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+    bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+    return bitmap;
+  }
+  
+  /**
+   * Convert Bitmap to float array (RGB normalized 0-1)
+   * Used for converting processed images back to model input format
+   */
+  private float[] bitmapToFloatArray(Bitmap bitmap) {
+    int width = bitmap.getWidth();
+    int height = bitmap.getHeight();
+    int[] pixels = new int[width * height];
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+    float[] data = new float[width * height * 3];
+    for (int i = 0; i < pixels.length; i++) {
+      int pixel = pixels[i];
+      data[i * 3] = ((pixel >> 16) & 0xFF) / 255.0f;
+      data[i * 3 + 1] = ((pixel >> 8) & 0xFF) / 255.0f;
+      data[i * 3 + 2] = (pixel & 0xFF) / 255.0f;
+    }
+    return data;
+  }
+  
+  /**
    * Apply fisheye lens correction to the image
-   * This helps with face detection accuracy on wide-angle/fisheye cameras like OX05B1S
+   * This helps with landmark/gaze accuracy on wide-angle/fisheye cameras like OX05B1S
+   * Now applied to face crop (112x112) instead of full image (480x480) for efficiency!
    * 
    * @param input Input bitmap with fisheye distortion
    * @param strength Correction strength (0.0 = no correction, 1.0 = full correction)

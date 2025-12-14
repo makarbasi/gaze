@@ -176,20 +176,19 @@ public class DisplayConfig {
             faceScaleFactor = (float) json.optDouble("face_scale_factor", faceScaleFactor);
             
             // Crop region settings
-            // First check for easy "crop_side" preset
-            cropSide = json.optString("crop_side", cropSide);
-            applyCropSidePreset(cropSide);
-            
-            // Allow manual override of offset/scale if specified
-            if (json.has("crop_offset_x")) {
+            // If crop_side is specified, it takes priority over manual offset/scale values
+            if (json.has("crop_side")) {
+                cropSide = json.optString("crop_side", cropSide);
+                applyCropSidePreset(cropSide);
+                // Ignore crop_offset_x and crop_scale when crop_side is used
+                Log.i(TAG, "Using crop_side='" + cropSide + "', ignoring any crop_offset_x/crop_scale values");
+            } else {
+                // No crop_side specified, use manual values
                 cropOffsetX = (float) json.optDouble("crop_offset_x", cropOffsetX);
-            }
-            if (json.has("crop_offset_y")) {
-                cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
-            }
-            if (json.has("crop_scale")) {
                 cropScale = (float) json.optDouble("crop_scale", cropScale);
             }
+            // crop_offset_y is always read (vertical position)
+            cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
             
             // Face crop settings
             faceCropPadding = (float) json.optDouble("face_crop_padding", faceCropPadding);

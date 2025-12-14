@@ -617,6 +617,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                           @Override
                           public void run() {
                             ImageView imageView = (ImageView) findViewById(R.id.imageView2);
+                            // Rotate 90° CW to fix CCW rotation issue with OX05B1S sensor
+                            imageView.setRotation(90);
                             imageView.setImageBitmap(detection);
                           }
                         });

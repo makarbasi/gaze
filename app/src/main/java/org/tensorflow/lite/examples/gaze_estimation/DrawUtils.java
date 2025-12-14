@@ -30,18 +30,10 @@ public class DrawUtils {
         Log.d("yolox_output_boxes", String.valueOf(boxes.length));
         for(int b = 0; b < boxes.length; b++){
             int box_color = G_color;
-            // Original coordinates
-            int origX1 = (int)(boxes[b][0]);
-            int origY1 = (int)(boxes[b][1]);
-            int origX2 = (int)(boxes[b][2]);
-            int origY2 = (int)(boxes[b][3]);
-            
-            // Rotate 90° CW to fix CCW rotation issue: (x, y) -> (y, res_h - 1 - x)
-            int x1 = origY1;
-            int y1 = res_h - 1 - origX2;  // Use origX2 for proper box corner mapping
-            int x2 = origY2;
-            int y2 = res_h - 1 - origX1;  // Use origX1 for proper box corner mapping
-            
+            int x1 = (int)(boxes[b][0]);
+            int y1 = (int)(boxes[b][1]);
+            int x2 = (int)(boxes[b][2]);
+            int y2 = (int)(boxes[b][3]);
             Log.d("yolox_output_coord", String.valueOf(x1)+" "+String.valueOf(y1)+" "+String.valueOf(x2)+" "+String.valueOf(y2));
 
             for (int l = line_pad * -1; l <= line_pad; l++) {
@@ -99,14 +91,8 @@ public class DrawUtils {
             return;
         }
         for (int i=0;i<landmark.length/2;i++) {
-            // Original coordinates
-            int origX = (int)landmark[i*2];
-            int origY = (int)landmark[i*2+1];
-            
-            // Rotate 90° CW to fix CCW rotation issue: (x, y) -> (y, res_h - 1 - x)
-            int x = origY;
-            int y = res_h - 1 - origX;
-            
+            int x = (int)landmark[i*2];
+            int y = (int)landmark[i*2+1];
             if (x < 0 || x >= res_w || y < 0 || y >= res_h)
                 continue;
             draw_circle(pixel, res_h, res_w, x, y);

@@ -520,18 +520,12 @@ public class CameraConnectionFragment extends Fragment {
       matrix.postRotate(90 * (rotation - 2), centerX, centerY);
     } else if (Surface.ROTATION_180 == rotation) {
       matrix.postRotate(180, centerX, centerY);
-    } else if (Surface.ROTATION_0 == rotation) {
-      // For automotive cameras (like OX05B1S) in portrait mode, apply 90° CCW rotation
-      bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-      matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-      final float scale =
-              Math.max(
-                      (float) viewHeight / previewSize.getHeight(),
-                      (float) viewWidth / previewSize.getWidth());
-      matrix.postScale(scale, scale, centerX, centerY);
-      matrix.postRotate(-90, centerX, centerY);  // Rotate 90° CCW to fix CW rotation
     }
     textureView.setTransform(matrix);
+    
+    // For automotive cameras (like OX05B1S), apply additional rotation to fix preview
+    // Main preview is 90° CW rotated, so rotate the view -90° (CCW) to compensate
+    textureView.setRotation(-90);
   }
 
   /**

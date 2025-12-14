@@ -11,7 +11,15 @@
 
 /.gradle/
 /.idea/
+
+# Build folders - never commit these
+**/build/
+**/.cxx/
+**/intermediates/
+
 # Project exclude paths
 /opencv/build/
 /opencv/build/intermediates/javac/debug/classes/
 /opencv/.cxx/*
+/app/.cxx/
+/app/build/

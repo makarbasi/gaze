@@ -12,9 +12,39 @@ import java.util.Vector;
 
 public class SmootherList {
     public Vector<Smoother> smoothers = new Vector<Smoother>();
+    
+    // Configurable smoothing parameters (loaded from DisplayConfig)
+    private double faceMinCutoff;
+    private double faceBeta;
+    private double landmarkMinCutoff;
+    private double landmarkBeta;
+    private double gazeMinCutoff;
+    private double gazeBeta;
+    
+    public SmootherList() {
+        // Load initial values from DisplayConfig
+        updateSmoothingParams();
+    }
+    
+    /**
+     * Update smoothing parameters from DisplayConfig
+     * Call this when config is reloaded
+     */
+    public void updateSmoothingParams() {
+        DisplayConfig config = DisplayConfig.getInstance();
+        this.faceMinCutoff = config.faceMinCutoff;
+        this.faceBeta = config.faceBeta;
+        this.landmarkMinCutoff = config.landmarkMinCutoff;
+        this.landmarkBeta = config.landmarkBeta;
+        this.gazeMinCutoff = config.gazeMinCutoff;
+        this.gazeBeta = config.gazeBeta;
+        Log.d("SmootherList", "Updated smoothing params: face(cutoff=" + faceMinCutoff + ", beta=" + faceBeta + 
+              "), landmark(cutoff=" + landmarkMinCutoff + ", beta=" + landmarkBeta + 
+              "), gaze(cutoff=" + gazeMinCutoff + ", beta=" + gazeBeta + ")");
+    }
 
     public void addOne() {
-        this.smoothers.addElement(new Smoother(DemoConfig.face_min_cutoff, DemoConfig.face_beta, DemoConfig.landmark_min_cutoff, DemoConfig.landmark_beta, DemoConfig.gaze_min_cutoff, DemoConfig.gaze_beta));
+        this.smoothers.addElement(new Smoother(faceMinCutoff, faceBeta, landmarkMinCutoff, landmarkBeta, gazeMinCutoff, gazeBeta));
     }
 
     private static double calc_diff(double[] p1, double[] p2) {

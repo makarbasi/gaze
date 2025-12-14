@@ -1,0 +1,1 @@
+C:\Users\makar\OneDrive\OLD\E-Learning\projects\other\ACE\gaze\app\src\main\cpp\CMakeLists.txt

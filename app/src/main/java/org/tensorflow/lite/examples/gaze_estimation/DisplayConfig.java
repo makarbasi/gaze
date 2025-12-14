@@ -85,6 +85,20 @@ public class DisplayConfig {
     public boolean gazePitchOnly = false;        // If true, only use pitch for detection (ignore yaw)
     public int gazeConsecutiveFrames = 3;        // Consecutive frames needed to change state
     
+    // Smoothing parameters for 1-Euro filter (lower values = more smoothing, less reactive)
+    // min_cutoff: Minimum cutoff frequency (Hz). Lower = smoother but more lag
+    // beta: Speed coefficient. Higher = faster response but more jitter
+    public double landmarkMinCutoff = 0.01;      // Landmark smoothing cutoff (default 0.01)
+    public double landmarkBeta = 0.05;           // Landmark speed coef (LOWERED from 0.1 - less jitter)
+    public double gazeMinCutoff = 0.01;          // Gaze smoothing cutoff (default 0.01)
+    public double gazeBeta = 0.1;                // Gaze speed coef (LOWERED from 0.8 - much less jitter!)
+    public double faceMinCutoff = 0.01;          // Face box smoothing cutoff
+    public double faceBeta = 0.05;               // Face box speed coef (LOWERED from 0.1)
+    
+    // Additional display smoothing (simple exponential moving average)
+    // Applied AFTER 1-Euro filter for ultra-stable display values
+    public float displaySmoothingAlpha = 0.3f;   // 0.0 = no change, 1.0 = no smoothing (0.3 = heavy smoothing)
+    
     // Singleton instance
     private static DisplayConfig instance = null;
     private long lastModified = 0;
@@ -172,6 +186,15 @@ public class DisplayConfig {
             gazePitchOnly = json.optBoolean("gaze_pitch_only", gazePitchOnly);
             gazeConsecutiveFrames = json.optInt("gaze_consecutive_frames", gazeConsecutiveFrames);
             
+            // Smoothing parameters
+            landmarkMinCutoff = json.optDouble("landmark_min_cutoff", landmarkMinCutoff);
+            landmarkBeta = json.optDouble("landmark_beta", landmarkBeta);
+            gazeMinCutoff = json.optDouble("gaze_min_cutoff", gazeMinCutoff);
+            gazeBeta = json.optDouble("gaze_beta", gazeBeta);
+            faceMinCutoff = json.optDouble("face_min_cutoff", faceMinCutoff);
+            faceBeta = json.optDouble("face_beta", faceBeta);
+            displaySmoothingAlpha = (float) json.optDouble("display_smoothing_alpha", displaySmoothingAlpha);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -201,6 +224,14 @@ public class DisplayConfig {
             Log.i(TAG, "  gaze_yaw_threshold: " + gazeYawThreshold + " rad (" + Math.toDegrees(gazeYawThreshold) + "°)");
             Log.i(TAG, "  gaze_pitch_only: " + gazePitchOnly);
             Log.i(TAG, "  gaze_consecutive_frames: " + gazeConsecutiveFrames);
+            Log.i(TAG, "  --- Smoothing (1-Euro Filter) ---");
+            Log.i(TAG, "  landmark_min_cutoff: " + landmarkMinCutoff);
+            Log.i(TAG, "  landmark_beta: " + landmarkBeta + " (lower=smoother)");
+            Log.i(TAG, "  gaze_min_cutoff: " + gazeMinCutoff);
+            Log.i(TAG, "  gaze_beta: " + gazeBeta + " (lower=smoother)");
+            Log.i(TAG, "  face_min_cutoff: " + faceMinCutoff);
+            Log.i(TAG, "  face_beta: " + faceBeta + " (lower=smoother)");
+            Log.i(TAG, "  display_smoothing_alpha: " + displaySmoothingAlpha + " (lower=smoother)");
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -246,7 +277,15 @@ public class DisplayConfig {
             writer.println("  \"gaze_pitch_threshold\": " + gazePitchThreshold + ",");
             writer.println("  \"gaze_yaw_threshold\": " + gazeYawThreshold + ",");
             writer.println("  \"gaze_pitch_only\": " + gazePitchOnly + ",");
-            writer.println("  \"gaze_consecutive_frames\": " + gazeConsecutiveFrames);
+            writer.println("  \"gaze_consecutive_frames\": " + gazeConsecutiveFrames + ",");
+            writer.println("");
+            writer.println("  \"landmark_min_cutoff\": " + landmarkMinCutoff + ",");
+            writer.println("  \"landmark_beta\": " + landmarkBeta + ",");
+            writer.println("  \"gaze_min_cutoff\": " + gazeMinCutoff + ",");
+            writer.println("  \"gaze_beta\": " + gazeBeta + ",");
+            writer.println("  \"face_min_cutoff\": " + faceMinCutoff + ",");
+            writer.println("  \"face_beta\": " + faceBeta + ",");
+            writer.println("  \"display_smoothing_alpha\": " + displaySmoothingAlpha);
             writer.println("}");
             
             lastModified = configFile.lastModified();

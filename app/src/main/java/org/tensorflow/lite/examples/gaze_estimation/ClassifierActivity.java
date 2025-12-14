@@ -465,6 +465,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     DisplayConfig displayConfig = DisplayConfig.getInstance();
     displayConfig.checkAndReload();
     
+    // Update smoother parameters from config (allows runtime tuning)
+    smoother_list.updateSmoothingParams();
+    
     // Apply fisheye undistortion if enabled
     Bitmap processedBitmap = croppedBitmap;
     if (displayConfig.fisheyeEnabled) {
@@ -751,9 +754,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
               final float refYaw = referenceYaw;
               
               // Apply exponential smoothing to gaze values (reduces jitter from head movement)
-              // Uses smoothing_alpha from config file
+              // Apply display smoothing (exponential moving average)
+              // Uses display_smoothing_alpha from DisplayConfig for additional stability
               if (displayGaze) {
-                float alpha = gazeConfig.smoothingAlpha;
+                // Use the lower of the two alphas for maximum smoothing
+                DisplayConfig smoothingConfig = DisplayConfig.getInstance();
+                float alpha = Math.min(gazeConfig.smoothingAlpha, smoothingConfig.displaySmoothingAlpha);
                 smoothedPitch = alpha * displayPitch + (1 - alpha) * smoothedPitch;
                 smoothedYaw = alpha * displayYaw + (1 - alpha) * smoothedYaw;
               }

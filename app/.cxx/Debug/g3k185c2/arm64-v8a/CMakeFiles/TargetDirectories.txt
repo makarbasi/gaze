@@ -1,0 +1,3 @@
+C:/Users/makar/OneDrive/OLD/E-Learning/projects/other/ACE/gaze/app/.cxx/Debug/g3k185c2/arm64-v8a/CMakeFiles/rebuild_cache.dir
+C:/Users/makar/OneDrive/OLD/E-Learning/projects/other/ACE/gaze/app/.cxx/Debug/g3k185c2/arm64-v8a/CMakeFiles/qnn_model_runner.dir
+C:/Users/makar/OneDrive/OLD/E-Learning/projects/other/ACE/gaze/app/.cxx/Debug/g3k185c2/arm64-v8a/CMakeFiles/edit_cache.dir

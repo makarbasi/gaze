@@ -1,0 +1,149 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 35
+    ndkVersion "25.1.8937393"  // NDK version for QNN JNI compilation
+    
+    defaultConfig {
+        applicationId "org.tensorflow.lite.examples.gaze_estimation"
+        minSdkVersion 24
+        targetSdkVersion 35
+        versionCode 1
+        versionName "1.0"
+        
+        // QNN JNI wrapper configuration
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17"
+                arguments "-DANDROID_STL=c++_shared"
+                abiFilters 'arm64-v8a'  // QNN primarily supports arm64
+            }
+        }
+        
+        ndk {
+            abiFilters 'arm64-v8a'  // QNN primarily supports arm64
+        }
+    }
+    
+    // CMake build configuration for QNN JNI wrapper
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.18.1"
+        }
+    }
+    signingConfigs {
+        debug {
+            storeFile file("${platformStoreFile}")
+            storePassword "${platformStorePassword}"
+            keyAlias "${platformKeyAlias}"
+            keyPassword "${platformKeyPassword}"
+        }
+        release {
+            storeFile file("${platformStoreFile}")
+            storePassword "${platformStorePassword}"
+            keyAlias "${platformKeyAlias}"
+            keyPassword "${platformKeyPassword}"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
+    }
+    packaging {
+        jniLibs {
+            pickFirsts += [
+                // Common shared libraries
+                'lib/arm64-v8a/libc++_shared.so',
+                
+                // ========== QNN Libraries (for running DLC files) ==========
+                // Core QNN libraries - you need to copy these from QNN SDK
+                // Download from: https://qpm.qualcomm.com/#/main/tools/details/Qualcomm_AI_Engine_Direct
+                'lib/arm64-v8a/libQnnHtp.so',           // HTP backend (Hexagon Tensor Processor)
+                'lib/arm64-v8a/libQnnGpu.so',           // GPU backend (Adreno)
+                'lib/arm64-v8a/libQnnDsp.so',           // DSP backend (legacy)
+                'lib/arm64-v8a/libQnnCpu.so',           // CPU backend (fallback)
+                'lib/arm64-v8a/libQnnModelDlc.so',      // DLC model loader
+                'lib/arm64-v8a/libQnnSystem.so',        // QNN system utilities
+                
+                // QNN HTP skel/stub libraries (for various Hexagon versions)
+                'lib/arm64-v8a/libQnnHtpPrepare.so',
+                'lib/arm64-v8a/libQnnHtpV68Skel.so',
+                'lib/arm64-v8a/libQnnHtpV68Stub.so',
+                'lib/arm64-v8a/libQnnHtpV69Skel.so',
+                'lib/arm64-v8a/libQnnHtpV69Stub.so',
+                'lib/arm64-v8a/libQnnHtpV73Skel.so',
+                'lib/arm64-v8a/libQnnHtpV73Stub.so',
+                'lib/arm64-v8a/libQnnHtpV75Skel.so',
+                'lib/arm64-v8a/libQnnHtpV75Stub.so',
+                'lib/arm64-v8a/libQnnHtpV79Skel.so',
+                'lib/arm64-v8a/libQnnHtpV79Stub.so',
+                'lib/arm64-v8a/libQnnHtpV81Skel.so',
+                'lib/arm64-v8a/libQnnHtpV81Stub.so',
+                'lib/arm64-v8a/libQnnHtpV85Skel.so',
+                'lib/arm64-v8a/libQnnHtpV85Stub.so',
+                
+                // QNN TFLite Delegate (for TFLite models with QNN acceleration)
+                'lib/arm64-v8a/libQnnTFLiteDelegate.so',
+                'lib/arm64-v8a/libqnn_delegate_jni.so'
+            ]
+        }
+    }
+    
+    // Source sets for JNI libraries
+    sourceSets {
+        main {
+            // QNN libraries should be placed here
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+    androidResources {
+        noCompress 'tflite'
+    }
+    lint {
+        abortOnError false
+    }
+    namespace 'org.tensorflow.lite.examples.gaze_estimation'
+}
+
+// Download default models; if you wish to use your own models then
+// place them in the "assets" directory and comment out this line.
+//apply from:'download.gradle'
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation 'androidx.appcompat:appcompat:1.0.0'
+    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.0.0'
+    implementation 'com.google.android.material:material:1.0.0'
+
+    // Build off of stable TensorFlow Lite (updated for better NNAPI/GPU support)
+    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
+    implementation 'org.tensorflow:tensorflow-lite-gpu:2.14.0'
+    implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'  // Added for FileUtil and model loading
+    
+    // QNN is now used for running DLC models (replaces SNPE)
+    // QNN libraries are loaded at runtime via JNI
+    // The following AARs are kept for backwards compatibility and TFLite QNN delegate
+    implementation (name: 'platform-validator', ext: 'aar')
+    implementation (name: 'qtld-release', ext: 'aar')  // QNN TFLite Delegate for .tflite models
+    implementation project(path: ':opencv')
+    // Use local TensorFlow library
+    // implementation 'org.tensorflow:tensorflow-lite-local:0.0.0'
+}

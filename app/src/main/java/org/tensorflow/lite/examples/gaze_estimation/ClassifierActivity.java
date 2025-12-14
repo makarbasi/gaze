@@ -488,8 +488,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     }
     // face detection end
 
-    Mat img = bitmap2mat(croppedBitmap);
-    // Log.d("DEBUG_IMG_SIZE", img.size() + " " + croppedBitmap.getWidth() + "x"+croppedBitmap.getHeight() + " " + cropCopyBitmap.getWidth() + "x" + cropCopyBitmap.getHeight());
+    // Use the same image for all processing (corrected if fisheye enabled)
+    // This ensures bounding boxes and landmarks align correctly
+    Mat img = bitmap2mat(processedBitmap);
+    // Log.d("DEBUG_IMG_SIZE", img.size() + " " + processedBitmap.getWidth() + "x"+processedBitmap.getHeight());
 
     Vector<float[]> landmarks = new Vector<float[]>();
     Vector<float[]> gazes = new Vector<float[]>();
@@ -601,14 +603,14 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         drawgaze(img, gazes.elementAt(i), landmarks.elementAt(i));
         drawheadpose(img, rvecs.elementAt(i), tvecs.elementAt(i), camera_matrix);
       }
-      Utils.matToBitmap(img, croppedBitmap);
-      croppedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+      Utils.matToBitmap(img, processedBitmap);
+      processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
       drawbox(pixs, boxes, DemoConfig.crop_H, DemoConfig.crop_W);
       for (float[] landmark : landmarks) {
         drawlandmark(pixs, landmark, DemoConfig.crop_H, DemoConfig.crop_W);
       }
     } else {
-      croppedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+      processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
     }
 
     //transpose

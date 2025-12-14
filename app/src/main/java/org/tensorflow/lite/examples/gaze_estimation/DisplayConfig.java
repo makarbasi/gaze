@@ -67,6 +67,14 @@ public class DisplayConfig {
     public int minFaceSize = 15;                 // Smaller for fisheye (default 30)
     public float faceScaleFactor = 1.5f;         // Scale up face box for landmarks
     
+    // Crop region settings (for wide FOV cameras)
+    // crop_offset_x: 0.0 = left edge, 0.25 = left half center, 0.5 = center, 0.75 = right half center, 1.0 = right edge
+    // crop_offset_y: 0.0 = top, 0.5 = center, 1.0 = bottom
+    // crop_scale: 1.0 = use full width, 0.5 = use half width (zoom in 2x)
+    public float cropOffsetX = 0.25f;            // Left half of image (for driver side)
+    public float cropOffsetY = 0.5f;             // Vertical center
+    public float cropScale = 0.5f;               // Use half the width (zoom in 2x)
+    
     // Singleton instance
     private static DisplayConfig instance = null;
     private long lastModified = 0;
@@ -139,6 +147,11 @@ public class DisplayConfig {
             minFaceSize = json.optInt("min_face_size", minFaceSize);
             faceScaleFactor = (float) json.optDouble("face_scale_factor", faceScaleFactor);
             
+            // Crop region settings
+            cropOffsetX = (float) json.optDouble("crop_offset_x", cropOffsetX);
+            cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
+            cropScale = (float) json.optDouble("crop_scale", cropScale);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -156,6 +169,10 @@ public class DisplayConfig {
             Log.i(TAG, "  face_detection_threshold: " + faceDetectionThreshold);
             Log.i(TAG, "  min_face_size: " + minFaceSize);
             Log.i(TAG, "  face_scale_factor: " + faceScaleFactor);
+            Log.i(TAG, "  --- Crop Region ---");
+            Log.i(TAG, "  crop_offset_x: " + cropOffsetX + " (0=left, 0.5=center, 1=right)");
+            Log.i(TAG, "  crop_offset_y: " + cropOffsetY + " (0=top, 0.5=center, 1=bottom)");
+            Log.i(TAG, "  crop_scale: " + cropScale + " (0.5=half/2x zoom, 1.0=full)");
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -189,7 +206,11 @@ public class DisplayConfig {
             writer.println("");
             writer.println("  \"face_detection_threshold\": " + faceDetectionThreshold + ",");
             writer.println("  \"min_face_size\": " + minFaceSize + ",");
-            writer.println("  \"face_scale_factor\": " + faceScaleFactor);
+            writer.println("  \"face_scale_factor\": " + faceScaleFactor + ",");
+            writer.println("");
+            writer.println("  \"crop_offset_x\": " + cropOffsetX + ",");
+            writer.println("  \"crop_offset_y\": " + cropOffsetY + ",");
+            writer.println("  \"crop_scale\": " + cropScale);
             writer.println("}");
             
             lastModified = configFile.lastModified();

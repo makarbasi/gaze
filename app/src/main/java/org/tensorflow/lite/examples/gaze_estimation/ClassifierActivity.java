@@ -412,9 +412,30 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     
     rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
 
+    // Get crop region settings from config
+    DisplayConfig cropConfig = DisplayConfig.getInstance();
+    cropConfig.checkAndReload();
+    
+    // Apply region-of-interest cropping for wide FOV cameras
+    // crop_offset_x: 0.0=left, 0.25=left-quarter, 0.5=center, 0.75=right-quarter, 1.0=right
+    // crop_scale: 0.5=use half width (2x zoom), 1.0=use full width
+    Bitmap regionBitmap = extractRegion(rgbFrameBitmap, 
+        cropConfig.cropOffsetX, cropConfig.cropOffsetY, cropConfig.cropScale);
+    
     //transform and crop the frame
     final Canvas canvas = new Canvas(croppedBitmap);
-    canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
+    // Use a simple scale transform for the extracted region
+    Matrix regionToCropTransform = new Matrix();
+    float scaleX = (float) DemoConfig.crop_W / regionBitmap.getWidth();
+    float scaleY = (float) DemoConfig.crop_H / regionBitmap.getHeight();
+    float scale = Math.max(scaleX, scaleY);
+    regionToCropTransform.postScale(scale, scale);
+    // Center the scaled image
+    float dx = (DemoConfig.crop_W - regionBitmap.getWidth() * scale) / 2;
+    float dy = (DemoConfig.crop_H - regionBitmap.getHeight() * scale) / 2;
+    regionToCropTransform.postTranslate(dx, dy);
+    
+    canvas.drawBitmap(regionBitmap, regionToCropTransform, null);
 
     if (DemoConfig.USE_FRONT_CAM) {
       // flip the camera image
@@ -829,6 +850,47 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       classifier = Classifier.create(this, model, device, numThreads);
     } catch (IOException e) {
       LOGGER.e(e, "Failed to create classifier.");
+    }
+  }
+  
+  /**
+   * Extract a region of interest from the source bitmap
+   * Used for wide FOV cameras where only a portion of the image is needed
+   * 
+   * @param source Source bitmap
+   * @param offsetX Horizontal offset (0.0 = left edge, 0.5 = center, 1.0 = right edge)
+   * @param offsetY Vertical offset (0.0 = top, 0.5 = center, 1.0 = bottom)
+   * @param scale Scale factor (0.5 = use half width, 1.0 = use full width)
+   * @return Cropped region bitmap
+   */
+  private Bitmap extractRegion(Bitmap source, float offsetX, float offsetY, float scale) {
+    int srcW = source.getWidth();
+    int srcH = source.getHeight();
+    
+    // Calculate region size based on scale
+    int regionW = (int) (srcW * scale);
+    int regionH = (int) (srcH * scale);
+    
+    // Ensure minimum size
+    regionW = Math.max(regionW, 100);
+    regionH = Math.max(regionH, 100);
+    
+    // Calculate region position based on offset
+    // offset 0.0 = region starts at left/top edge
+    // offset 0.5 = region is centered
+    // offset 1.0 = region ends at right/bottom edge
+    int x = (int) ((srcW - regionW) * offsetX);
+    int y = (int) ((srcH - regionH) * offsetY);
+    
+    // Clamp to valid bounds
+    x = Math.max(0, Math.min(x, srcW - regionW));
+    y = Math.max(0, Math.min(y, srcH - regionH));
+    
+    try {
+      return Bitmap.createBitmap(source, x, y, regionW, regionH);
+    } catch (Exception e) {
+      LOGGER.e(e, "Failed to extract region, using full image");
+      return source;
     }
   }
   

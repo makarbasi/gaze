@@ -82,6 +82,7 @@ public abstract class CameraActivity extends AppCompatActivity
   private HandlerThread handlerThread;
   private boolean useCamera2API;
   private boolean isProcessingFrame = false;
+  private long lastProcessedFrameTime = 0;  // For optional frame rate limiting
   private byte[][] yuvBytes = new byte[3][];
   private int[] rgbBytes = null;
   private int yRowStride;
@@ -507,6 +508,18 @@ public abstract class CameraActivity extends AppCompatActivity
         image.close();
         return;
       }
+      
+      // Optional: enforce minimum interval between processed frames
+      DisplayConfig config = DisplayConfig.getInstance();
+      if (config.minFrameIntervalMs > 0) {
+        long now = System.currentTimeMillis();
+        if (now - lastProcessedFrameTime < config.minFrameIntervalMs) {
+          image.close();
+          return;
+        }
+        lastProcessedFrameTime = now;
+      }
+      
       isProcessingFrame = true;
       Trace.beginSection("imageAvailable");
       final Plane[] planes = image.getPlanes();

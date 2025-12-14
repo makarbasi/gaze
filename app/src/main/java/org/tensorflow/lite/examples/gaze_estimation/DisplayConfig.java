@@ -103,6 +103,11 @@ public class DisplayConfig {
     // Applied AFTER 1-Euro filter for ultra-stable display values
     public float displaySmoothingAlpha = 0.3f;   // 0.0 = no change, 1.0 = no smoothing (0.3 = heavy smoothing)
     
+    // Frame processing settings (for slower devices)
+    // Frames are automatically skipped when AI is still processing (no forced skipping)
+    // Use min_frame_interval_ms to add extra throttling if needed
+    public int minFrameIntervalMs = 0;           // Minimum milliseconds between processed frames (0=no limit, 100=max 10fps, 200=max 5fps)
+    
     // Singleton instance
     private static DisplayConfig instance = null;
     private long lastModified = 0;
@@ -212,6 +217,9 @@ public class DisplayConfig {
             faceBeta = json.optDouble("face_beta", faceBeta);
             displaySmoothingAlpha = (float) json.optDouble("display_smoothing_alpha", displaySmoothingAlpha);
             
+            // Frame processing settings
+            minFrameIntervalMs = json.optInt("min_frame_interval_ms", minFrameIntervalMs);
+            
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
             Log.i(TAG, "  preview_rotation: " + previewRotation);
@@ -250,6 +258,8 @@ public class DisplayConfig {
             Log.i(TAG, "  face_min_cutoff: " + faceMinCutoff);
             Log.i(TAG, "  face_beta: " + faceBeta + " (lower=smoother)");
             Log.i(TAG, "  display_smoothing_alpha: " + displaySmoothingAlpha + " (lower=smoother)");
+            Log.i(TAG, "  --- Frame Processing ---");
+            Log.i(TAG, "  min_frame_interval_ms: " + minFrameIntervalMs + "ms (0=no limit, frames auto-skipped during processing)");
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -302,7 +312,9 @@ public class DisplayConfig {
             writer.println("  \"gaze_beta\": " + gazeBeta + ",");
             writer.println("  \"face_min_cutoff\": " + faceMinCutoff + ",");
             writer.println("  \"face_beta\": " + faceBeta + ",");
-            writer.println("  \"display_smoothing_alpha\": " + displaySmoothingAlpha);
+            writer.println("  \"display_smoothing_alpha\": " + displaySmoothingAlpha + ",");
+            writer.println("");
+            writer.println("  \"min_frame_interval_ms\": " + minFrameIntervalMs);
             writer.println("}");
             
             lastModified = configFile.lastModified();

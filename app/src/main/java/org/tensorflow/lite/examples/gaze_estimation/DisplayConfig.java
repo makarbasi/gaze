@@ -68,12 +68,12 @@ public class DisplayConfig {
     public float faceScaleFactor = 1.5f;         // Scale up face box for landmarks
     
     // Crop region settings (for wide FOV cameras)
-    // crop_offset_x: 0.0 = left edge, 0.25 = left half center, 0.5 = center, 0.75 = right half center, 1.0 = right edge
-    // crop_offset_y: 0.0 = top, 0.5 = center, 1.0 = bottom
-    // crop_scale: 1.0 = use full width, 0.5 = use half width (zoom in 2x)
-    public float cropOffsetX = 0.0f;             // Left edge (for driver side)
+    // crop_side: "left", "right", "center", or "full" - easy preset for which half to use
+    // crop_offset_x/y and crop_scale are computed from crop_side, or can be set manually
+    public String cropSide = "left";             // Which side to use: "left", "right", "center", "full"
+    public float cropOffsetX = 0.0f;             // Computed from cropSide (0=left, 0.5=center, 1=right)
     public float cropOffsetY = 0.5f;             // Vertical center
-    public float cropScale = 0.5f;               // Use half the width (left half only)
+    public float cropScale = 0.5f;               // Computed from cropSide (0.5=half, 1.0=full)
     
     // Face crop settings
     public float faceCropPadding = 2.0f;         // Padding around face box (2.0 = 2x the box size)
@@ -176,9 +176,20 @@ public class DisplayConfig {
             faceScaleFactor = (float) json.optDouble("face_scale_factor", faceScaleFactor);
             
             // Crop region settings
-            cropOffsetX = (float) json.optDouble("crop_offset_x", cropOffsetX);
-            cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
-            cropScale = (float) json.optDouble("crop_scale", cropScale);
+            // First check for easy "crop_side" preset
+            cropSide = json.optString("crop_side", cropSide);
+            applyCropSidePreset(cropSide);
+            
+            // Allow manual override of offset/scale if specified
+            if (json.has("crop_offset_x")) {
+                cropOffsetX = (float) json.optDouble("crop_offset_x", cropOffsetX);
+            }
+            if (json.has("crop_offset_y")) {
+                cropOffsetY = (float) json.optDouble("crop_offset_y", cropOffsetY);
+            }
+            if (json.has("crop_scale")) {
+                cropScale = (float) json.optDouble("crop_scale", cropScale);
+            }
             
             // Face crop settings
             faceCropPadding = (float) json.optDouble("face_crop_padding", faceCropPadding);
@@ -220,9 +231,10 @@ public class DisplayConfig {
             Log.i(TAG, "  min_face_size: " + minFaceSize);
             Log.i(TAG, "  face_scale_factor: " + faceScaleFactor);
             Log.i(TAG, "  --- Crop Region ---");
-            Log.i(TAG, "  crop_offset_x: " + cropOffsetX + " (0=left, 0.5=center, 1=right)");
-            Log.i(TAG, "  crop_offset_y: " + cropOffsetY + " (0=top, 0.5=center, 1=bottom)");
-            Log.i(TAG, "  crop_scale: " + cropScale + " (0.5=half/2x zoom, 1.0=full)");
+            Log.i(TAG, "  crop_side: '" + cropSide + "' (left/right/center/full)");
+            Log.i(TAG, "  crop_offset_x: " + cropOffsetX + " (computed from crop_side)");
+            Log.i(TAG, "  crop_offset_y: " + cropOffsetY);
+            Log.i(TAG, "  crop_scale: " + cropScale);
             Log.i(TAG, "  --- Face Crop ---");
             Log.i(TAG, "  face_crop_padding: " + faceCropPadding + "x");
             Log.i(TAG, "  face_crop_display_size: " + faceCropDisplaySize + "px");
@@ -274,9 +286,8 @@ public class DisplayConfig {
             writer.println("  \"min_face_size\": " + minFaceSize + ",");
             writer.println("  \"face_scale_factor\": " + faceScaleFactor + ",");
             writer.println("");
-            writer.println("  \"crop_offset_x\": " + cropOffsetX + ",");
+            writer.println("  \"crop_side\": \"" + cropSide + "\",");
             writer.println("  \"crop_offset_y\": " + cropOffsetY + ",");
-            writer.println("  \"crop_scale\": " + cropScale + ",");
             writer.println("");
             writer.println("  \"face_crop_padding\": " + faceCropPadding + ",");
             writer.println("  \"face_crop_display_size\": " + faceCropDisplaySize + ",");
@@ -302,6 +313,36 @@ public class DisplayConfig {
             Log.e(TAG, "Error writing config file: " + e.getMessage());
             return false;
         }
+    }
+    
+    /**
+     * Apply crop side preset - sets cropOffsetX and cropScale based on side name
+     * @param side "left", "right", "center", or "full"
+     */
+    private void applyCropSidePreset(String side) {
+        switch (side.toLowerCase()) {
+            case "left":
+                cropOffsetX = 0.0f;      // Start from left edge
+                cropScale = 0.5f;        // Use half width
+                break;
+            case "right":
+                cropOffsetX = 1.0f;      // Start from right edge
+                cropScale = 0.5f;        // Use half width
+                break;
+            case "center":
+                cropOffsetX = 0.5f;      // Center
+                cropScale = 0.5f;        // Use half width (center half)
+                break;
+            case "full":
+                cropOffsetX = 0.5f;      // Center (doesn't matter for full)
+                cropScale = 1.0f;        // Use full width
+                break;
+            default:
+                Log.w(TAG, "Unknown crop_side: " + side + ", using 'left'");
+                cropOffsetX = 0.0f;
+                cropScale = 0.5f;
+        }
+        Log.d(TAG, "Applied crop_side='" + side + "' -> offsetX=" + cropOffsetX + ", scale=" + cropScale);
     }
     
     /**

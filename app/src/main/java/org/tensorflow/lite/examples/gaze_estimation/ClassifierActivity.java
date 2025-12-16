@@ -221,6 +221,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   
   /**
    * Start recording landmarks and gaze data to a file
+   * Files are saved to app's external files directory:
+   *   /storage/emulated/0/Android/data/org.tensorflow.lite.examples.gaze_estimation/files/
+   * 
+   * To pull files via ADB:
+   *   adb pull /storage/emulated/0/Android/data/org.tensorflow.lite.examples.gaze_estimation/files/
    */
   private void startRecording() {
     try {
@@ -229,10 +234,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       String timestamp = sdf.format(new Date());
       boolean isLooking = isLookingCheckbox != null && isLookingCheckbox.isChecked();
       String suffix = isLooking ? "_looking" : "_notlooking";
-      currentRecordingFile = "/data/local/tmp/" + timestamp + suffix + ".csv";
+      String filename = timestamp + suffix + ".csv";
+      
+      // Use app's external files directory (accessible via ADB without root)
+      File dir = getExternalFilesDir(null);
+      if (dir == null) {
+        throw new IOException("External files directory not available");
+      }
+      File file = new File(dir, filename);
+      currentRecordingFile = file.getAbsolutePath();
       
       // Create file and writer
-      File file = new File(currentRecordingFile);
       recordingWriter = new BufferedWriter(new FileWriter(file));
       
       // Write CSV header

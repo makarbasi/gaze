@@ -30,11 +30,18 @@ import android.util.Size;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.Vector;
 
 import org.opencv.android.Utils;
@@ -190,6 +197,136 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           }
         }
       });
+    }
+    
+    // Initialize recording UI elements
+    recordButton = findViewById(R.id.record_button);
+    isLookingCheckbox = findViewById(R.id.is_looking_checkbox);
+    
+    if (recordButton != null) {
+      recordButton.setOnClickListener(new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          if (!isRecording) {
+            // Start recording
+            startRecording();
+          } else {
+            // Stop recording
+            stopRecording();
+          }
+        }
+      });
+    }
+  }
+  
+  /**
+   * Start recording landmarks and gaze data to a file
+   */
+  private void startRecording() {
+    try {
+      // Create filename with timestamp
+      SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US);
+      String timestamp = sdf.format(new Date());
+      boolean isLooking = isLookingCheckbox != null && isLookingCheckbox.isChecked();
+      String suffix = isLooking ? "_looking" : "_notlooking";
+      currentRecordingFile = "/data/local/tmp/" + timestamp + suffix + ".csv";
+      
+      // Create file and writer
+      File file = new File(currentRecordingFile);
+      recordingWriter = new BufferedWriter(new FileWriter(file));
+      
+      // Write CSV header
+      StringBuilder header = new StringBuilder();
+      header.append("timestamp,isLooking");
+      // Landmark columns (98 landmarks * 2 = 196 values)
+      for (int i = 0; i < 98; i++) {
+        header.append(",lm").append(i).append("_x");
+        header.append(",lm").append(i).append("_y");
+      }
+      // Gaze columns
+      header.append(",gaze_pitch,gaze_yaw");
+      header.append("\n");
+      recordingWriter.write(header.toString());
+      
+      isRecording = true;
+      recordButton.setText("⏹ Stop");
+      recordButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xDDFF0000));
+      
+      Toast.makeText(this, "Recording started: " + currentRecordingFile, Toast.LENGTH_SHORT).show();
+      Log.i("Recording", "Started recording to: " + currentRecordingFile);
+      
+    } catch (IOException e) {
+      Log.e("Recording", "Failed to start recording: " + e.getMessage());
+      Toast.makeText(this, "Failed to start recording: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+    }
+  }
+  
+  /**
+   * Stop recording and close the file
+   */
+  private void stopRecording() {
+    if (recordingWriter != null) {
+      try {
+        recordingWriter.close();
+        recordingWriter = null;
+        
+        Toast.makeText(this, "Recording saved: " + currentRecordingFile, Toast.LENGTH_SHORT).show();
+        Log.i("Recording", "Stopped recording, saved to: " + currentRecordingFile);
+        
+      } catch (IOException e) {
+        Log.e("Recording", "Error closing recording file: " + e.getMessage());
+      }
+    }
+    
+    isRecording = false;
+    recordButton.setText("⏺ Record");
+    recordButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xDDFF5722));
+    currentRecordingFile = null;
+  }
+  
+  /**
+   * Record a single frame of landmark and gaze data
+   */
+  private void recordFrame(float[] landmarks, float[] gaze) {
+    if (!isRecording || recordingWriter == null) {
+      return;
+    }
+    
+    try {
+      StringBuilder line = new StringBuilder();
+      
+      // Timestamp
+      line.append(System.currentTimeMillis());
+      
+      // isLooking status
+      boolean isLooking = isLookingCheckbox != null && isLookingCheckbox.isChecked();
+      line.append(",").append(isLooking ? "1" : "0");
+      
+      // Landmarks (196 values = 98 landmarks * 2)
+      if (landmarks != null && landmarks.length >= 196) {
+        for (int i = 0; i < 196; i++) {
+          line.append(",").append(landmarks[i]);
+        }
+      } else {
+        // Fill with zeros if no landmarks
+        for (int i = 0; i < 196; i++) {
+          line.append(",0");
+        }
+      }
+      
+      // Gaze (pitch, yaw)
+      if (gaze != null && gaze.length >= 2) {
+        line.append(",").append(gaze[0]);
+        line.append(",").append(gaze[1]);
+      } else {
+        line.append(",0,0");
+      }
+      
+      line.append("\n");
+      recordingWriter.write(line.toString());
+      
+    } catch (IOException e) {
+      Log.e("Recording", "Error writing frame: " + e.getMessage());
     }
   }
 
@@ -393,6 +530,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private View gazeOverlay;
   private TextView gazeStatusText;
   private Button calibrateButton;
+  
+  // Recording UI and state
+  private Button recordButton;
+  private CheckBox isLookingCheckbox;
+  private boolean isRecording = false;
+  private BufferedWriter recordingWriter = null;
+  private String currentRecordingFile = null;
   @Override
 
   protected Bitmap processImage() {
@@ -639,6 +783,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   latestGazePitch = gaze_pitchyaw[0];
                   latestGazeYaw = gaze_pitchyaw[1];
                   hasGazeData = true;
+                  
+                  // Record frame if recording is active
+                  recordFrame(landmark, gaze_pitchyaw);
                 }
             } else {
                 Log.e("QNN", "Gaze estimation inference failed");
@@ -887,6 +1034,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   @Override
   public synchronized void onDestroy() {
     LOGGER.d("ClassifierActivity onDestroy");
+    
+    // Stop recording if active
+    if (isRecording) {
+      stopRecording();
+    }
     
     // Cleanup TFLite Face Detector
     if (tfliteFaceDetector != null) {

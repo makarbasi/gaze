@@ -879,8 +879,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
+                    Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
                     isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
                     lookingProbability = lookingClassifier.getLastProbability();
+                    Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+                  } else {
+                    Log.w("LookingClassifier", "Classifier not available: null=" + (lookingClassifier == null));
                   }
                   
                   // Record frame if recording is active (now includes head pose)

@@ -4,12 +4,17 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.util.Log;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.opencv.core.Mat;
 import org.opencv.calib3d.Calib3d;
 import org.tensorflow.lite.Interpreter;
 
+import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
@@ -17,17 +22,18 @@ import java.nio.channels.FileChannel;
  * Classifier to determine if user is looking at the camera.
  * 
  * Uses a TFLite model trained on gaze, head pose, and eye landmark features.
- * The model has built-in normalization, so raw features can be passed directly.
+ * Applies StandardScaler normalization using mean/scale from metadata.
  * 
  * Input features (41 total):
  *   - 7 core features: gaze_pitch, gaze_yaw, head_pitch, head_yaw, head_roll, relative_pitch, relative_yaw
- *   - 34 landmark features: eye landmarks (lm60-67, lm68-75) and nose tip (lm54)
+ *   - 34 landmark features: eye landmarks (lm64-75, lm54, lm60-63)
  * 
  * Output: probability (0-1) that user is looking at camera
  */
 public class LookingClassifier {
     private static final String TAG = "LookingClassifier";
     private static final String MODEL_PATH = "looking_classifier.tflite";
+    private static final String METADATA_PATH = "model_metadata.json";
     
     // Feature indices for landmarks (must match training order)
     // Order: lm64, lm65, lm66, lm67, lm68, lm69, lm70, lm71, lm72, lm73, lm74, lm75, lm54, lm60, lm61, lm62, lm63
@@ -38,6 +44,10 @@ public class LookingClassifier {
     
     private Interpreter interpreter;
     private boolean isInitialized = false;
+    
+    // Normalization parameters (from StandardScaler)
+    private float[] mean = null;
+    private float[] scale = null;
     
     // Reusable arrays for inference
     private float[][] inputArray = new float[1][NUM_FEATURES];
@@ -50,20 +60,68 @@ public class LookingClassifier {
     public LookingClassifier() {}
     
     /**
-     * Initialize the classifier by loading the TFLite model
+     * Initialize the classifier by loading the TFLite model and metadata
      */
     public boolean initialize(Context context) {
         try {
+            // Load normalization metadata first
+            if (!loadMetadata(context)) {
+                Log.e(TAG, "Failed to load normalization metadata");
+                return false;
+            }
+            
+            // Load TFLite model
             MappedByteBuffer modelBuffer = loadModelFile(context);
             Interpreter.Options options = new Interpreter.Options();
             options.setNumThreads(2);
             interpreter = new Interpreter(modelBuffer, options);
             isInitialized = true;
-            Log.i(TAG, "Looking classifier initialized successfully");
+            Log.i(TAG, "✓ Looking classifier initialized with " + NUM_FEATURES + " features");
             return true;
         } catch (Exception e) {
             Log.e(TAG, "Failed to initialize looking classifier: " + e.getMessage());
+            e.printStackTrace();
             isInitialized = false;
+            return false;
+        }
+    }
+    
+    /**
+     * Load normalization parameters from metadata JSON
+     */
+    private boolean loadMetadata(Context context) {
+        try {
+            InputStream is = context.getAssets().open(METADATA_PATH);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+            
+            JSONObject json = new JSONObject(sb.toString());
+            
+            // Load mean array
+            JSONArray meanArray = json.getJSONArray("mean");
+            mean = new float[meanArray.length()];
+            for (int i = 0; i < meanArray.length(); i++) {
+                mean[i] = (float) meanArray.getDouble(i);
+            }
+            
+            // Load scale array
+            JSONArray scaleArray = json.getJSONArray("scale");
+            scale = new float[scaleArray.length()];
+            for (int i = 0; i < scaleArray.length(); i++) {
+                scale[i] = (float) scaleArray.getDouble(i);
+            }
+            
+            Log.i(TAG, "Loaded normalization params: mean[" + mean.length + "], scale[" + scale.length + "]");
+            return mean.length == NUM_FEATURES && scale.length == NUM_FEATURES;
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error loading metadata: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
@@ -117,6 +175,22 @@ public class LookingClassifier {
     }
     
     /**
+     * Apply StandardScaler normalization: (x - mean) / scale
+     */
+    private void normalizeFeatures() {
+        if (mean == null || scale == null) {
+            Log.w(TAG, "No normalization params, skipping");
+            return;
+        }
+        
+        for (int i = 0; i < NUM_FEATURES; i++) {
+            if (scale[i] != 0) {
+                inputArray[0][i] = (inputArray[0][i] - mean[i]) / scale[i];
+            }
+        }
+    }
+    
+    /**
      * Run inference to determine if user is looking at camera
      * 
      * @param gazePitchYaw Gaze pitch and yaw from gaze estimation (2 values)
@@ -131,6 +205,7 @@ public class LookingClassifier {
         }
         
         if (gazePitchYaw == null || gazePitchYaw.length < 2) {
+            Log.w(TAG, "Invalid gaze data");
             return false;
         }
         
@@ -149,7 +224,7 @@ public class LookingClassifier {
             float relative_pitch = gaze_pitch - head_pitch;
             float relative_yaw = gaze_yaw - head_yaw;
             
-            // Build input array
+            // Build input array (raw features)
             int idx = 0;
             
             // Core features (7)
@@ -162,18 +237,20 @@ public class LookingClassifier {
             inputArray[0][idx++] = relative_yaw;
             
             // Landmark features (17 landmarks * 2 = 34)
-            // Order must match training: lm64, lm65, lm66, lm67, lm68, lm69, lm70, lm71, lm72, lm73, lm74, lm75, lm54, lm60, lm61, lm62, lm63
             if (landmarks != null && landmarks.length >= 196) {
                 for (int lmIdx : LANDMARK_INDICES) {
                     inputArray[0][idx++] = landmarks[lmIdx * 2];     // x
                     inputArray[0][idx++] = landmarks[lmIdx * 2 + 1]; // y
                 }
             } else {
-                // Fill with zeros if no landmarks
+                Log.w(TAG, "Missing landmarks, using zeros");
                 for (int i = 0; i < 34; i++) {
                     inputArray[0][idx++] = 0;
                 }
             }
+            
+            // Apply normalization: (x - mean) / scale
+            normalizeFeatures();
             
             // Run inference
             interpreter.run(inputArray, outputArray);
@@ -182,10 +259,15 @@ public class LookingClassifier {
             lastProbability = outputArray[0][0];
             lastIsLooking = lastProbability > THRESHOLD;
             
+            // Log every prediction for debugging
+            Log.d(TAG, String.format("ML: prob=%.2f%%, looking=%b (gaze: p=%.2f, y=%.2f)", 
+                lastProbability * 100, lastIsLooking, gaze_pitch, gaze_yaw));
+            
             return lastIsLooking;
             
         } catch (Exception e) {
             Log.e(TAG, "Inference error: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
@@ -222,4 +304,3 @@ public class LookingClassifier {
         isInitialized = false;
     }
 }
-

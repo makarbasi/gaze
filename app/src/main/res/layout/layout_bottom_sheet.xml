@@ -158,6 +158,18 @@
             android:textColor="@android:color/black"
             android:elevation="4dp" />
 
+        <!-- Per-frame Looking/Not-Looking probabilities (shown under calibrate button) -->
+        <TextView
+            android:id="@+id/looking_prob_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="Looking --% | Not --%"
+            android:textColor="@android:color/black"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -107,6 +107,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   
   // TFLite Face Detector (from HotGaze - more accurate)
   private TFLiteFaceDetector tfliteFaceDetector = null;
+  
+  // Looking Classifier - determines if user is looking at camera
+  private LookingClassifier lookingClassifier = null;
+  private volatile boolean isLookingAtCamera = false;
+  private volatile float lookingProbability = 0f;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -504,6 +509,20 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         Toast.makeText(this, "TFLite face detection failed, using SNPE fallback", Toast.LENGTH_LONG).show();
       }
     }
+    
+    // Initialize Looking Classifier (determines if user is looking at camera)
+    try {
+      lookingClassifier = new LookingClassifier();
+      if (lookingClassifier.initialize(this)) {
+        Log.i("LookingClassifier", "✓ Looking Classifier initialized successfully");
+      } else {
+        Log.e("LookingClassifier", "Looking Classifier initialization failed");
+        lookingClassifier = null;
+      }
+    } catch (Exception e) {
+      Log.e("LookingClassifier", "Looking Classifier error: " + e.getMessage());
+      lookingClassifier = null;
+    }
 
     // Create QNN networks for landmark and gaze estimation (and face detection fallback)
     // QNN replaces SNPE for running DLC files
@@ -858,6 +877,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   latestGazeYaw = gaze_pitchyaw[1];
                   hasGazeData = true;
                   
+                  // Run Looking Classifier to determine if user is looking at camera
+                  if (lookingClassifier != null && lookingClassifier.isInitialized()) {
+                    isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
+                    lookingProbability = lookingClassifier.getLastProbability();
+                  }
+                  
                   // Record frame if recording is active (now includes head pose)
                   recordFrame(landmark, gaze_pitchyaw, gaze_preprocess_result.rvec);
                 }
@@ -1016,29 +1041,55 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                     pitchOnly ? "YES" : "NO"));
                 }
                 
-                // Determine if looking at camera
-                if (pitchOnly) {
-                  // Only use pitch for detection (for when face is toward camera)
-                  currentFrameLooking = (pitchDiff < pitchThreshold);
+                // Determine if looking at camera using ML classifier (if available)
+                // The ML classifier has already computed isLookingAtCamera in processImage()
+                if (lookingClassifier != null && lookingClassifier.isInitialized()) {
+                  // Use ML classifier result directly (already computed above)
+                  currentFrameLooking = isLookingAtCamera;
                 } else {
-                  // Use both pitch and yaw
-                  currentFrameLooking = (pitchDiff < pitchThreshold) && (yawDiff < yawThreshold);
+                  // Fallback to threshold-based detection
+                  if (pitchOnly) {
+                    // Only use pitch for detection (for when face is toward camera)
+                    currentFrameLooking = (pitchDiff < pitchThreshold);
+                  } else {
+                    // Use both pitch and yaw
+                    currentFrameLooking = (pitchDiff < pitchThreshold) && (yawDiff < yawThreshold);
+                  }
                 }
               }
               
               // Temporal smoothing - require consecutive frames to change state
               int smoothingFrames = gazeThresholds.gazeConsecutiveFrames;
-              if (currentFrameLooking) {
-                lookingAtCameraCount++;
-                notLookingAtCameraCount = 0;
-                if (lookingAtCameraCount >= smoothingFrames) {
-                  isLookingAtCamera = true;
+              if (lookingClassifier != null && lookingClassifier.isInitialized()) {
+                // ML classifier handles its own smoothing, just use result
+                // But still do minimal smoothing for stability
+                if (currentFrameLooking) {
+                  lookingAtCameraCount++;
+                  notLookingAtCameraCount = 0;
+                  if (lookingAtCameraCount >= 2) {  // Require only 2 frames for ML
+                    isLookingAtCamera = true;
+                  }
+                } else {
+                  notLookingAtCameraCount++;
+                  lookingAtCameraCount = 0;
+                  if (notLookingAtCameraCount >= 2) {
+                    isLookingAtCamera = false;
+                  }
                 }
               } else {
-                notLookingAtCameraCount++;
-                lookingAtCameraCount = 0;
-                if (notLookingAtCameraCount >= smoothingFrames) {
-                  isLookingAtCamera = false;
+                // Original threshold-based smoothing
+                if (currentFrameLooking) {
+                  lookingAtCameraCount++;
+                  notLookingAtCameraCount = 0;
+                  if (lookingAtCameraCount >= smoothingFrames) {
+                    isLookingAtCamera = true;
+                  }
+                } else {
+                  notLookingAtCameraCount++;
+                  lookingAtCameraCount = 0;
+                  if (notLookingAtCameraCount >= smoothingFrames) {
+                    isLookingAtCamera = false;
+                  }
                 }
               }
               
@@ -1061,18 +1112,27 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                         clearGazePitchYaw();
                       }
                       
-                      // Update gaze overlay if calibrated
-                      if (calibrated && gazeOverlay != null && gazeStatusText != null) {
+                      // Update gaze overlay if calibrated or using ML classifier
+                      boolean useMLClassifier = lookingClassifier != null && lookingClassifier.isInitialized();
+                      if ((calibrated || useMLClassifier) && gazeOverlay != null && gazeStatusText != null) {
                         if (displayGaze) {
                           if (lookingAtCam) {
                             // Looking at camera - green overlay
                             gazeOverlay.setBackgroundColor(0x6000FF00);  // Semi-transparent green
-                            gazeStatusText.setText("✓ Looking at Camera");
+                            if (useMLClassifier) {
+                              gazeStatusText.setText(String.format("✓ Looking (%.0f%%)", lookingProbability * 100));
+                            } else {
+                              gazeStatusText.setText("✓ Looking at Camera");
+                            }
                             gazeStatusText.setTextColor(0xFF00FF00);
                           } else {
                             // Not looking at camera - red overlay
                             gazeOverlay.setBackgroundColor(0x60FF0000);  // Semi-transparent red
-                            gazeStatusText.setText("✗ Not Looking at Camera");
+                            if (useMLClassifier) {
+                              gazeStatusText.setText(String.format("✗ Not Looking (%.0f%%)", (1 - lookingProbability) * 100));
+                            } else {
+                              gazeStatusText.setText("✗ Not Looking at Camera");
+                            }
                             gazeStatusText.setTextColor(0xFFFF0000);
                           }
                           gazeOverlay.setVisibility(View.VISIBLE);
@@ -1119,6 +1179,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       tfliteFaceDetector.close();
       tfliteFaceDetector = null;
       LOGGER.d("TFLite Face Detector closed");
+    }
+    
+    // Cleanup Looking Classifier
+    if (lookingClassifier != null) {
+      lookingClassifier.close();
+      lookingClassifier = null;
+      LOGGER.d("Looking Classifier closed");
     }
     
     // Cleanup QNN Model Runners

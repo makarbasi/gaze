@@ -1120,7 +1120,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                             // Looking at camera - green overlay
                             gazeOverlay.setBackgroundColor(0x6000FF00);  // Semi-transparent green
                             if (useMLClassifier) {
-                              gazeStatusText.setText(String.format("✓ Looking (%.0f%%)", lookingProbability * 100));
+                              gazeStatusText.setText(String.format("✓ Looking %.0f%%", lookingProbability * 100));
                             } else {
                               gazeStatusText.setText("✓ Looking at Camera");
                             }
@@ -1129,7 +1129,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                             // Not looking at camera - red overlay
                             gazeOverlay.setBackgroundColor(0x60FF0000);  // Semi-transparent red
                             if (useMLClassifier) {
-                              gazeStatusText.setText(String.format("✗ Not Looking (%.0f%%)", (1 - lookingProbability) * 100));
+                              gazeStatusText.setText(String.format("✗ Not Looking %.0f%%", lookingProbability * 100));
                             } else {
                               gazeStatusText.setText("✗ Not Looking at Camera");
                             }

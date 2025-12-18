@@ -1019,54 +1019,56 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 smoothedYaw = alpha * displayYaw + (1 - alpha) * smoothedYaw;
               }
               
-              // Check if looking at camera using thresholds from display_config.json
+              // Check if looking at camera
               // Get thresholds from DisplayConfig (can be modified at runtime)
               DisplayConfig gazeThresholds = DisplayConfig.getInstance();
               boolean currentFrameLooking = false;
-              if (calibrated && displayGaze) {
+              boolean useMLClassifierForDetection = lookingClassifier != null && lookingClassifier.isInitialized();
+              
+              // ML Classifier takes priority - use its result directly
+              if (useMLClassifierForDetection && displayGaze) {
+                // ML classifier already computed isLookingAtCamera in processImage() at line ~882
+                currentFrameLooking = isLookingAtCamera;
+                
+                // Log ML result (every ~1 second)
+                if (System.currentTimeMillis() % 1000 < 50) {
+                  Log.i("GazeML", String.format(
+                    "ML Classifier: Looking=%b, Probability=%.1f%%",
+                    isLookingAtCamera, lookingProbability * 100));
+                }
+              } else if (calibrated && displayGaze) {
+                // Fallback to threshold-based detection (only if calibrated)
                 float pitchDiff = Math.abs(smoothedPitch - refPitch);
                 float yawDiff = Math.abs(smoothedYaw - refYaw);
                 
-                // Use separate thresholds for pitch and yaw
                 float pitchThreshold = gazeThresholds.gazePitchThreshold;
                 float yawThreshold = gazeThresholds.gazeYawThreshold;
                 boolean pitchOnly = gazeThresholds.gazePitchOnly;
                 
                 // Log for debugging (every ~1 second)
                 if (System.currentTimeMillis() % 1000 < 50) {
-                  Log.i("GazeDetect", String.format(
+                  Log.i("GazeThreshold", String.format(
                     "Pitch: %.1f° (diff: %.1f°, thr: %.1f°) | Yaw: %.1f° (diff: %.1f°, thr: %.1f°) | PitchOnly: %s",
                     Math.toDegrees(smoothedPitch), Math.toDegrees(pitchDiff), Math.toDegrees(pitchThreshold),
                     Math.toDegrees(smoothedYaw), Math.toDegrees(yawDiff), Math.toDegrees(yawThreshold),
                     pitchOnly ? "YES" : "NO"));
                 }
                 
-                // Determine if looking at camera using ML classifier (if available)
-                // The ML classifier has already computed isLookingAtCamera in processImage()
-                if (lookingClassifier != null && lookingClassifier.isInitialized()) {
-                  // Use ML classifier result directly (already computed above)
-                  currentFrameLooking = isLookingAtCamera;
+                if (pitchOnly) {
+                  currentFrameLooking = (pitchDiff < pitchThreshold);
                 } else {
-                  // Fallback to threshold-based detection
-                  if (pitchOnly) {
-                    // Only use pitch for detection (for when face is toward camera)
-                    currentFrameLooking = (pitchDiff < pitchThreshold);
-                  } else {
-                    // Use both pitch and yaw
-                    currentFrameLooking = (pitchDiff < pitchThreshold) && (yawDiff < yawThreshold);
-                  }
+                  currentFrameLooking = (pitchDiff < pitchThreshold) && (yawDiff < yawThreshold);
                 }
               }
               
               // Temporal smoothing - require consecutive frames to change state
               int smoothingFrames = gazeThresholds.gazeConsecutiveFrames;
-              if (lookingClassifier != null && lookingClassifier.isInitialized()) {
-                // ML classifier handles its own smoothing, just use result
-                // But still do minimal smoothing for stability
+              if (useMLClassifierForDetection) {
+                // ML classifier: minimal smoothing for stability (2 frames)
                 if (currentFrameLooking) {
                   lookingAtCameraCount++;
                   notLookingAtCameraCount = 0;
-                  if (lookingAtCameraCount >= 2) {  // Require only 2 frames for ML
+                  if (lookingAtCameraCount >= 2) {
                     isLookingAtCamera = true;
                   }
                 } else {
@@ -1077,7 +1079,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   }
                 }
               } else {
-                // Original threshold-based smoothing
+                // Threshold-based: use configured smoothing frames
                 if (currentFrameLooking) {
                   lookingAtCameraCount++;
                   notLookingAtCameraCount = 0;

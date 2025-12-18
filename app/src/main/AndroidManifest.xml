@@ -15,8 +15,7 @@
         android:label="@string/activity_name_classification"
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme"
-        android:noHistory="true">
+        android:theme="@style/AppTheme">
         
         <!-- Launcher Activity - Main entry point -->
         <activity
@@ -30,7 +29,7 @@
             </intent-filter>
         </activity>
         
-        <!-- Camera Activity - Live gaze tracking -->
+        <!-- Camera Activity - Live gaze tracking (noHistory OK - no file picker) -->
         <activity
             android:name="org.tensorflow.lite.examples.gaze_estimation.ClassifierActivity"
             android:label="@string/activity_name_classification"
@@ -39,21 +38,19 @@
             android:exported="false">
         </activity>
         
-        <!-- Image Processing Activity - Batch processing -->
+        <!-- Image Processing Activity - Batch processing (needs to stay alive for folder picker) -->
         <activity
             android:name="org.tensorflow.lite.examples.gaze_estimation.ImageProcessingActivity"
             android:label="Batch Image Processing"
             android:screenOrientation="portrait"
-            android:noHistory="true"
             android:exported="false">
         </activity>
         
-        <!-- Single Image Activity - Single image processing -->
+        <!-- Single Image Activity - Single image processing (needs to stay alive for image picker) -->
         <activity
             android:name="org.tensorflow.lite.examples.gaze_estimation.SingleImageActivity"
             android:label="Single Image Processing"
             android:screenOrientation="portrait"
-            android:noHistory="true"
             android:exported="false">
         </activity>
         

@@ -146,16 +146,16 @@
 
         </LinearLayout>
 
-        <!-- Calibrate button -->
+        <!-- Calibrate button (GREEN to verify build) -->
         <Button
             android:id="@+id/calibrate_button"
             android:layout_width="match_parent"
             android:layout_height="42dp"
             android:layout_marginTop="4dp"
-            android:text="📍 Calibrate"
+            android:text="📍 Calibrate (ML Active)"
             android:textSize="13sp"
-            android:backgroundTint="#DD2196F3"
-            android:textColor="@android:color/white"
+            android:backgroundTint="#DD00FF00"
+            android:textColor="@android:color/black"
             android:elevation="4dp" />
 
         <LinearLayout

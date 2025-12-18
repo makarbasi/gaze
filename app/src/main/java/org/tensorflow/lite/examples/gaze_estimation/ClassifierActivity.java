@@ -1114,37 +1114,43 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                         clearGazePitchYaw();
                       }
                       
-                      // Update gaze overlay if calibrated or using ML classifier
+                      // Update gaze overlay - ML classifier takes priority
                       boolean useMLClassifier = lookingClassifier != null && lookingClassifier.isInitialized();
-                      if ((calibrated || useMLClassifier) && gazeOverlay != null && gazeStatusText != null) {
-                        if (displayGaze) {
-                          if (lookingAtCam) {
-                            // Looking at camera - green overlay
-                            gazeOverlay.setBackgroundColor(0x6000FF00);  // Semi-transparent green
-                            if (useMLClassifier) {
+                      
+                      // DEBUG: Log ML classifier status
+                      Log.d("GazeUI", "useMLClassifier=" + useMLClassifier + 
+                          ", calibrated=" + calibrated + 
+                          ", displayGaze=" + displayGaze +
+                          ", lookingAtCam=" + lookingAtCam +
+                          ", prob=" + lookingProbability);
+                      
+                      if (gazeOverlay != null && gazeStatusText != null) {
+                        // Always show overlay when ML classifier is active OR when calibrated
+                        if (useMLClassifier || calibrated) {
+                          if (displayGaze) {
+                            if (lookingAtCam) {
+                              // Looking at camera - green overlay
+                              gazeOverlay.setBackgroundColor(0x6000FF00);  // Semi-transparent green
                               gazeStatusText.setText(String.format("✓ Looking %.0f%%", lookingProbability * 100));
+                              gazeStatusText.setTextColor(0xFF00FF00);
                             } else {
-                              gazeStatusText.setText("✓ Looking at Camera");
-                            }
-                            gazeStatusText.setTextColor(0xFF00FF00);
-                          } else {
-                            // Not looking at camera - red overlay
-                            gazeOverlay.setBackgroundColor(0x60FF0000);  // Semi-transparent red
-                            if (useMLClassifier) {
+                              // Not looking at camera - red overlay
+                              gazeOverlay.setBackgroundColor(0x60FF0000);  // Semi-transparent red
                               gazeStatusText.setText(String.format("✗ Not Looking %.0f%%", lookingProbability * 100));
-                            } else {
-                              gazeStatusText.setText("✗ Not Looking at Camera");
+                              gazeStatusText.setTextColor(0xFFFF0000);
                             }
-                            gazeStatusText.setTextColor(0xFFFF0000);
+                          } else {
+                            // No face detected - yellow overlay
+                            gazeOverlay.setBackgroundColor(0x60FFFF00);  // Semi-transparent yellow
+                            gazeStatusText.setText("No Face Detected");
+                            gazeStatusText.setTextColor(0xFFFFFF00);
                           }
+                          // ALWAYS set visibility when ML or calibrated
                           gazeOverlay.setVisibility(View.VISIBLE);
                           gazeStatusText.setVisibility(View.VISIBLE);
-                        } else {
-                          // No face detected
-                          gazeOverlay.setBackgroundColor(0x60FFFF00);  // Semi-transparent yellow
-                          gazeStatusText.setText("No Face Detected");
-                          gazeStatusText.setTextColor(0xFFFFFF00);
                         }
+                      } else {
+                        Log.e("GazeUI", "gazeOverlay or gazeStatusText is NULL!");
                       }
                     }
                   });

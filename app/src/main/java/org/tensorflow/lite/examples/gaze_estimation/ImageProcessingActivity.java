@@ -1,13 +1,17 @@
 package org.tensorflow.lite.examples.gaze_estimation;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -139,6 +143,15 @@ public class ImageProcessingActivity extends AppCompatActivity {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 selectedFolderUri = uri;
                 scanForImages(uri);
+            }
+        } else if (requestCode == REQUEST_MANAGE_STORAGE) {
+            // Check if permission was granted and then open picker
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+                Toast.makeText(this, "Full storage access granted!", Toast.LENGTH_SHORT).show();
+                showPathInputDialog(); // Now they can enter any path
+            } else {
+                Toast.makeText(this, "Permission not granted. Using limited picker.", Toast.LENGTH_SHORT).show();
+                openFolderPicker();
             }
         }
     }
@@ -312,9 +325,114 @@ public class ImageProcessingActivity extends AppCompatActivity {
     }
     
     private void selectFolder() {
+        // Check if we have full storage access on Android 11+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                // Show dialog explaining why we need the permission
+                new AlertDialog.Builder(this)
+                    .setTitle("Storage Access Required")
+                    .setMessage("For full folder access, the app needs 'All Files Access' permission.\n\n" +
+                               "You can either:\n" +
+                               "1. Grant full access (recommended for batch processing)\n" +
+                               "2. Use limited picker (may not access all folders)")
+                    .setPositiveButton("Grant Full Access", (d, w) -> {
+                        try {
+                            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                            intent.setData(Uri.parse("package:" + getPackageName()));
+                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                        } catch (Exception e) {
+                            Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                        }
+                    })
+                    .setNegativeButton("Use Limited Picker", (d, w) -> {
+                        openFolderPicker();
+                    })
+                    .setNeutralButton("Enter Path", (d, w) -> {
+                        showPathInputDialog();
+                    })
+                    .show();
+                return;
+            }
+        }
+        openFolderPicker();
+    }
+    
+    private static final int REQUEST_MANAGE_STORAGE = 3;
+    
+    private void openFolderPicker() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        // Try to start in a common location
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            intent.putExtra("android.provider.extra.INITIAL_URI", 
+                Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADCIM"));
+        }
         startActivityForResult(intent, REQUEST_FOLDER_PICKER);
+    }
+    
+    private void showPathInputDialog() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setHint("/sdcard/DCIM/Camera");
+        input.setText("/sdcard/");
+        
+        new AlertDialog.Builder(this)
+            .setTitle("Enter Folder Path")
+            .setMessage("Enter the full path to the folder with images:")
+            .setView(input)
+            .setPositiveButton("OK", (d, w) -> {
+                String path = input.getText().toString().trim();
+                if (!path.isEmpty()) {
+                    scanFolderByPath(path);
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void scanFolderByPath(String path) {
+        File folder = new File(path);
+        if (!folder.exists() || !folder.isDirectory()) {
+            Toast.makeText(this, "Invalid folder path: " + path, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        imageUris.clear();
+        statusText.setText("Scanning: " + path);
+        
+        executorService.execute(() -> {
+            scanFolderByPathRecursive(folder);
+            
+            mainHandler.post(() -> {
+                totalCount = imageUris.size();
+                if (totalCount > 0) {
+                    statusText.setText("Found " + totalCount + " images in " + path);
+                    startProcessingButton.setEnabled(true);
+                } else {
+                    statusText.setText("No images found in: " + path);
+                    startProcessingButton.setEnabled(false);
+                }
+            });
+        });
+    }
+    
+    private void scanFolderByPathRecursive(File folder) {
+        if (folder == null || !folder.isDirectory()) return;
+        
+        File[] files = folder.listFiles();
+        if (files == null) return;
+        
+        for (File file : files) {
+            if (file.isDirectory()) {
+                scanFolderByPathRecursive(file);
+            } else if (file.isFile()) {
+                String name = file.getName().toLowerCase();
+                if (name.endsWith(".jpg") || name.endsWith(".jpeg") || 
+                    name.endsWith(".png") || name.endsWith(".bmp")) {
+                    imageUris.add(Uri.fromFile(file));
+                }
+            }
+        }
     }
     
     private void scanForImages(Uri folderUri) {

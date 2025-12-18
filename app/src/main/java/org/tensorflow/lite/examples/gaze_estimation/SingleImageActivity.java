@@ -278,13 +278,14 @@ public class SingleImageActivity extends AppCompatActivity {
                 
                 if (boxes == null || boxes.length == 0) {
                     // No face - save empty record and show result
-                    saveRecord(imageUri.getLastPathSegment(), null, null);
+                    saveRecord(imageUri.getLastPathSegment(), null, null, null);
                     showResult(croppedBitmap, "No face detected");
                     return;
                 }
                 
                 Vector<float[]> landmarks = new Vector<>();
                 Vector<float[]> gazes = new Vector<>();
+                Mat firstRvec = null;  // Store rvec for head pose recording
                 
                 // === LANDMARK + GAZE for each face - same as ClassifierActivity ===
                 for (int b = 0; b < boxes.length; b++) {
@@ -303,6 +304,12 @@ public class SingleImageActivity extends AppCompatActivity {
                     
                     // Gaze estimation - same as ClassifierActivity
                     ProcessFactory.GazePreprocessResult gazeResult = gaze_preprocess(img, landmark);
+                    
+                    // Store first rvec for head pose recording
+                    if (firstRvec == null) {
+                        firstRvec = gazeResult.rvec;
+                    }
+                    
                     String[] inputNames = {"left_eye", "right_eye", "face"};
                     float[][] inputArrays = {gazeResult.leye, gazeResult.reye, gazeResult.face};
                     int[][] inputDims = {
@@ -335,10 +342,10 @@ public class SingleImageActivity extends AppCompatActivity {
                 
                 processedBitmap.setPixels(pixels, 0, DemoConfig.crop_W, 0, 0, DemoConfig.crop_W, DemoConfig.crop_H);
                 
-                // === SAVE RECORD ===
+                // === SAVE RECORD (now includes head pose) ===
                 float[] firstLandmark = landmarks.size() > 0 ? landmarks.get(0) : null;
                 float[] firstGaze = gazes.size() > 0 ? gazes.get(0) : null;
-                saveRecord(imageUri.getLastPathSegment(), firstLandmark, firstGaze);
+                saveRecord(imageUri.getLastPathSegment(), firstLandmark, firstGaze, firstRvec);
                 
                 String msg = "Faces: " + boxes.length;
                 if (firstGaze != null) {
@@ -359,7 +366,41 @@ public class SingleImageActivity extends AppCompatActivity {
         });
     }
     
-    private void saveRecord(String filename, float[] landmarks, float[] gaze) {
+    /**
+     * Extract head pose Euler angles (pitch, yaw, roll) from rotation vector
+     */
+    private float[] extractHeadPose(Mat rvec) {
+        if (rvec == null || rvec.empty()) {
+            return new float[]{0, 0, 0};
+        }
+        
+        try {
+            Mat rotMat = new Mat();
+            org.opencv.calib3d.Calib3d.Rodrigues(rvec, rotMat);
+            
+            double sy = Math.sqrt(rotMat.get(0, 0)[0] * rotMat.get(0, 0)[0] + rotMat.get(1, 0)[0] * rotMat.get(1, 0)[0]);
+            boolean singular = sy < 1e-6;
+            
+            double pitch, yaw, roll;
+            if (!singular) {
+                roll = Math.atan2(rotMat.get(2, 1)[0], rotMat.get(2, 2)[0]);
+                pitch = Math.atan2(-rotMat.get(2, 0)[0], sy);
+                yaw = Math.atan2(rotMat.get(1, 0)[0], rotMat.get(0, 0)[0]);
+            } else {
+                roll = Math.atan2(-rotMat.get(1, 2)[0], rotMat.get(1, 1)[0]);
+                pitch = Math.atan2(-rotMat.get(2, 0)[0], sy);
+                yaw = 0;
+            }
+            
+            rotMat.release();
+            return new float[]{(float)pitch, (float)yaw, (float)roll};
+        } catch (Exception e) {
+            Log.e(TAG, "Error extracting head pose: " + e.getMessage());
+            return new float[]{0, 0, 0};
+        }
+    }
+    
+    private void saveRecord(String filename, float[] landmarks, float[] gaze, Mat rvec) {
         try {
             File file = new File(RECORD_FILE);
             boolean isNew = !file.exists();
@@ -368,7 +409,8 @@ public class SingleImageActivity extends AppCompatActivity {
             if (isNew) {
                 StringBuilder h = new StringBuilder("timestamp,filename");
                 for (int i = 0; i < 98; i++) h.append(",lm").append(i).append("_x,lm").append(i).append("_y");
-                h.append(",pitch,yaw\n");
+                // 7 features for ML model
+                h.append(",gaze_pitch,gaze_yaw,head_pitch,head_yaw,head_roll,relative_pitch,relative_yaw\n");
                 w.write(h.toString());
             }
             
@@ -382,11 +424,28 @@ public class SingleImageActivity extends AppCompatActivity {
                 for (int i = 0; i < 196; i++) line.append(",");
             }
             
-            if (gaze != null && gaze.length >= 2) {
-                line.append(",").append(gaze[0]).append(",").append(gaze[1]);
-            } else {
-                line.append(",,");
-            }
+            // Extract head pose
+            float[] headPose = extractHeadPose(rvec);
+            float head_pitch = headPose[0];
+            float head_yaw = headPose[1];
+            float head_roll = headPose[2];
+            
+            // Gaze
+            float gaze_pitch = (gaze != null && gaze.length >= 2) ? gaze[0] : 0;
+            float gaze_yaw = (gaze != null && gaze.length >= 2) ? gaze[1] : 0;
+            
+            // Relative gaze
+            float relative_pitch = gaze_pitch - head_pitch;
+            float relative_yaw = gaze_yaw - head_yaw;
+            
+            // Write all 7 features
+            line.append(",").append(gaze_pitch);
+            line.append(",").append(gaze_yaw);
+            line.append(",").append(head_pitch);
+            line.append(",").append(head_yaw);
+            line.append(",").append(head_roll);
+            line.append(",").append(relative_pitch);
+            line.append(",").append(relative_yaw);
             line.append("\n");
             
             w.write(line.toString());

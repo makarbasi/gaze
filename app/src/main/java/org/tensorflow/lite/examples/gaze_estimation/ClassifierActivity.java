@@ -255,8 +255,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         header.append(",lm").append(i).append("_x");
         header.append(",lm").append(i).append("_y");
       }
-      // Gaze columns
+      // Gaze and head pose columns (7 features for ML model)
       header.append(",gaze_pitch,gaze_yaw");
+      header.append(",head_pitch,head_yaw,head_roll");
+      header.append(",relative_pitch,relative_yaw");
       header.append("\n");
       recordingWriter.write(header.toString());
       
@@ -297,9 +299,49 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   }
   
   /**
-   * Record a single frame of landmark and gaze data
+   * Extract head pose Euler angles (pitch, yaw, roll) from rotation vector
+   * @param rvec Rotation vector from head pose estimation
+   * @return float[3] = {head_pitch, head_yaw, head_roll} in radians
    */
-  private void recordFrame(float[] landmarks, float[] gaze) {
+  private float[] extractHeadPose(Mat rvec) {
+    if (rvec == null || rvec.empty()) {
+      return new float[]{0, 0, 0};
+    }
+    
+    try {
+      // Convert rotation vector to rotation matrix
+      Mat rotMat = new Mat();
+      org.opencv.calib3d.Calib3d.Rodrigues(rvec, rotMat);
+      
+      // Extract Euler angles from rotation matrix
+      // Using the convention: R = Rz(yaw) * Ry(pitch) * Rx(roll)
+      double sy = Math.sqrt(rotMat.get(0, 0)[0] * rotMat.get(0, 0)[0] + rotMat.get(1, 0)[0] * rotMat.get(1, 0)[0]);
+      boolean singular = sy < 1e-6;
+      
+      double pitch, yaw, roll;
+      if (!singular) {
+        roll = Math.atan2(rotMat.get(2, 1)[0], rotMat.get(2, 2)[0]);
+        pitch = Math.atan2(-rotMat.get(2, 0)[0], sy);
+        yaw = Math.atan2(rotMat.get(1, 0)[0], rotMat.get(0, 0)[0]);
+      } else {
+        roll = Math.atan2(-rotMat.get(1, 2)[0], rotMat.get(1, 1)[0]);
+        pitch = Math.atan2(-rotMat.get(2, 0)[0], sy);
+        yaw = 0;
+      }
+      
+      rotMat.release();
+      return new float[]{(float)pitch, (float)yaw, (float)roll};
+    } catch (Exception e) {
+      Log.e("Recording", "Error extracting head pose: " + e.getMessage());
+      return new float[]{0, 0, 0};
+    }
+  }
+  
+  /**
+   * Record a single frame with gaze and head pose data
+   * Records: gaze_pitch, gaze_yaw, head_pitch, head_yaw, head_roll, relative_pitch, relative_yaw
+   */
+  private void recordFrame(float[] landmarks, float[] gaze, Mat rvec) {
     if (!isRecording || recordingWriter == null) {
       return;
     }
@@ -320,19 +362,33 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           line.append(",").append(landmarks[i]);
         }
       } else {
-        // Fill with zeros if no landmarks
         for (int i = 0; i < 196; i++) {
           line.append(",0");
         }
       }
       
+      // Extract head pose from rvec
+      float[] headPose = extractHeadPose(rvec);
+      float head_pitch = headPose[0];
+      float head_yaw = headPose[1];
+      float head_roll = headPose[2];
+      
       // Gaze (pitch, yaw)
-      if (gaze != null && gaze.length >= 2) {
-        line.append(",").append(gaze[0]);
-        line.append(",").append(gaze[1]);
-      } else {
-        line.append(",0,0");
-      }
+      float gaze_pitch = (gaze != null && gaze.length >= 2) ? gaze[0] : 0;
+      float gaze_yaw = (gaze != null && gaze.length >= 2) ? gaze[1] : 0;
+      
+      // Calculate relative gaze (gaze relative to head orientation)
+      float relative_pitch = gaze_pitch - head_pitch;
+      float relative_yaw = gaze_yaw - head_yaw;
+      
+      // Write all 7 features
+      line.append(",").append(gaze_pitch);
+      line.append(",").append(gaze_yaw);
+      line.append(",").append(head_pitch);
+      line.append(",").append(head_yaw);
+      line.append(",").append(head_roll);
+      line.append(",").append(relative_pitch);
+      line.append(",").append(relative_yaw);
       
       line.append("\n");
       recordingWriter.write(line.toString());
@@ -802,8 +858,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   latestGazeYaw = gaze_pitchyaw[1];
                   hasGazeData = true;
                   
-                  // Record frame if recording is active
-                  recordFrame(landmark, gaze_pitchyaw);
+                  // Record frame if recording is active (now includes head pose)
+                  recordFrame(landmark, gaze_pitchyaw, gaze_preprocess_result.rvec);
                 }
             } else {
                 Log.e("QNN", "Gaze estimation inference failed");

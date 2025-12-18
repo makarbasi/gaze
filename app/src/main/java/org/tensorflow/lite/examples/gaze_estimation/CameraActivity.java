@@ -251,12 +251,27 @@ public abstract class CameraActivity extends AppCompatActivity
     return null;
   }
 
+  // OpenCV initialization state
+  protected volatile boolean isOpenCVReady = false;
+  
   public void initLoadOpenCV() {
+    // Try OpenCVLoader.initDebug() first
     boolean success = OpenCVLoader.initDebug();
     if (success) {
-      Log.d("init", "initLoadOpenCV: openCV load success");
-    } else {
-      Log.e("init", "initLoadOpenCV: openCV load failed");
+      Log.d("init", "initLoadOpenCV: openCV load success via initDebug()");
+      isOpenCVReady = true;
+      return;
+    }
+    
+    // Fallback: try loading the native library directly
+    Log.w("init", "OpenCVLoader.initDebug() failed - trying System.loadLibrary()");
+    try {
+      System.loadLibrary("opencv_java4");
+      Log.d("init", "initLoadOpenCV: openCV load success via System.loadLibrary()");
+      isOpenCVReady = true;
+    } catch (UnsatisfiedLinkError e) {
+      Log.e("init", "Failed to load opencv_java4: " + e.getMessage());
+      isOpenCVReady = false;
     }
   }
 

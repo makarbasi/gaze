@@ -556,6 +556,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // NOTE: We do NOT reset hasFaceDetected and hasGazeData here anymore
     // They persist between frames so the calibrate button can read them reliably
     
+    // Check if OpenCV is ready before using Mat operations
+    if (!isOpenCVReady) {
+      Log.e("OpenCV", "OpenCV not initialized, skipping frame processing");
+      return rgbFrameBitmap;
+    }
+    
     // Check if required networks are initialized (using QNN now)
     boolean hasFaceDetection = (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) || 
                                (face_detection_qnn != null && face_detection_qnn.isReady());

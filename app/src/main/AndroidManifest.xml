@@ -2,6 +2,8 @@
     android:sharedUserId="android.uid.system"> -->
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.camera.autofocus" />
@@ -15,16 +17,45 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:noHistory="true">
+        
+        <!-- Launcher Activity - Main entry point -->
         <activity
-            android:name="org.tensorflow.lite.examples.gaze_estimation.ClassifierActivity"
-            android:label="@string/activity_name_classification"
+            android:name="org.tensorflow.lite.examples.gaze_estimation.LauncherActivity"
+            android:label="Gaze Estimation"
             android:screenOrientation="portrait"
-            android:noHistory="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- Camera Activity - Live gaze tracking -->
+        <activity
+            android:name="org.tensorflow.lite.examples.gaze_estimation.ClassifierActivity"
+            android:label="@string/activity_name_classification"
+            android:screenOrientation="portrait"
+            android:noHistory="true"
+            android:exported="false">
+        </activity>
+        
+        <!-- Image Processing Activity - Batch processing -->
+        <activity
+            android:name="org.tensorflow.lite.examples.gaze_estimation.ImageProcessingActivity"
+            android:label="Batch Image Processing"
+            android:screenOrientation="portrait"
+            android:noHistory="true"
+            android:exported="false">
+        </activity>
+        
+        <!-- Single Image Activity - Single image processing -->
+        <activity
+            android:name="org.tensorflow.lite.examples.gaze_estimation.SingleImageActivity"
+            android:label="Single Image Processing"
+            android:screenOrientation="portrait"
+            android:noHistory="true"
+            android:exported="false">
+        </activity>
+        
     </application>
 </manifest>

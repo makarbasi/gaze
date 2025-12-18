@@ -43,9 +43,7 @@ import com.example.gazedemo1.ProcessFactory;
 
 /**
  * Activity for processing a single user-selected image through gaze estimation pipeline.
- * - Select an image from device gallery
- * - Run face detection, landmark detection, and gaze estimation
- * - Display the results overlaid on the image
+ * Uses the SAME business logic as ImageProcessingActivity (batch mode) and ClassifierActivity (camera mode).
  */
 public class SingleImageActivity extends AppCompatActivity {
     private static final String TAG = "SingleImage";
@@ -54,12 +52,13 @@ public class SingleImageActivity extends AppCompatActivity {
     private TextView statusText;
     private TextView resultsText;
     private ImageView previewImage;
-    private ImageView processedImage;
+    private ImageView processedImageView;
     private Button selectImageButton;
     private ProgressBar progressBar;
     private LinearLayout resultsPanel;
+    private LinearLayout processedContainer;
     
-    // Models
+    // Models - same as ImageProcessingActivity
     private TFLiteFaceDetector tfliteFaceDetector = null;
     private QNNModelRunner landmark_detection_qnn = null;
     private QNNModelRunner gaze_estimation_qnn = null;
@@ -71,19 +70,15 @@ public class SingleImageActivity extends AppCompatActivity {
     // Image picker request code
     private static final int REQUEST_IMAGE_PICKER = 2001;
     
-    // OpenCV initialization state
+    // State flags
     private volatile boolean isOpenCVReady = false;
     private volatile boolean modelsReady = false;
-    
-    // Current selected image
-    private Uri selectedImageUri = null;
-    private Bitmap originalBitmap = null;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Initialize OpenCV
+        // Initialize OpenCV - SAME pattern as ImageProcessingActivity
         initLoadOpenCV();
         
         mainHandler = new Handler(Looper.getMainLooper());
@@ -93,50 +88,26 @@ public class SingleImageActivity extends AppCompatActivity {
         initializeModels();
     }
     
+    /**
+     * Initialize OpenCV - same pattern as ImageProcessingActivity
+     */
     private void initLoadOpenCV() {
-        // Try OpenCVLoader.initDebug() first
         boolean success = OpenCVLoader.initDebug();
         if (success) {
             Log.d(TAG, "OpenCV load success via initDebug()");
-            // Verify it actually works by creating a test Mat
-            if (testOpenCVNative()) {
-                isOpenCVReady = true;
-                return;
-            }
+            isOpenCVReady = true;
+            return;
         }
         
-        // Fallback: try loading the native library directly
         Log.w(TAG, "OpenCVLoader.initDebug() failed - trying System.loadLibrary()");
         try {
             System.loadLibrary("opencv_java4");
             Log.d(TAG, "OpenCV load success via System.loadLibrary()");
-            if (testOpenCVNative()) {
-                isOpenCVReady = true;
-            } else {
-                Log.e(TAG, "OpenCV native test failed even after library load");
-                isOpenCVReady = false;
-            }
+            isOpenCVReady = true;
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Failed to load opencv_java4: " + e.getMessage());
+            Toast.makeText(this, "OpenCV failed to load", Toast.LENGTH_LONG).show();
             isOpenCVReady = false;
-        }
-    }
-    
-    /**
-     * Test if OpenCV native library is actually working by creating a Mat
-     */
-    private boolean testOpenCVNative() {
-        try {
-            Mat testMat = new Mat();
-            testMat.release();
-            Log.d(TAG, "OpenCV native test passed");
-            return true;
-        } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "OpenCV native test failed: " + e.getMessage());
-            return false;
-        } catch (Exception e) {
-            Log.e(TAG, "OpenCV native test exception: " + e.getMessage());
-            return false;
         }
     }
     
@@ -148,7 +119,6 @@ public class SingleImageActivity extends AppCompatActivity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(32, 48, 32, 48);
         
-        // Create gradient background
         GradientDrawable gradient = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             new int[]{0xFF1A1A2E, 0xFF16213E, 0xFF0F3460}
@@ -165,25 +135,16 @@ public class SingleImageActivity extends AppCompatActivity {
         title.setPadding(0, 0, 0, 8);
         layout.addView(title);
         
-        // Subtitle
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Select an image to analyze gaze direction");
-        subtitle.setTextSize(14);
-        subtitle.setTextColor(0xFF778DA9);
-        subtitle.setGravity(Gravity.CENTER);
-        subtitle.setPadding(0, 0, 0, 24);
-        layout.addView(subtitle);
-        
         // Status text
         statusText = new TextView(this);
         statusText.setText("Loading models...");
         statusText.setTextSize(14);
         statusText.setTextColor(0xFFFFD700);
         statusText.setGravity(Gravity.CENTER);
-        statusText.setPadding(0, 0, 0, 16);
+        statusText.setPadding(0, 8, 0, 16);
         layout.addView(statusText);
         
-        // Progress bar (for loading)
+        // Progress bar
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleLarge);
         progressBar.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
@@ -197,7 +158,7 @@ public class SingleImageActivity extends AppCompatActivity {
         
         // Select image button
         selectImageButton = new Button(this);
-        selectImageButton.setText("📁 Select Image from Gallery");
+        selectImageButton.setText("📁 Select Image");
         selectImageButton.setTextSize(16);
         selectImageButton.setTextColor(0xFFFFFFFF);
         selectImageButton.setPadding(48, 32, 48, 32);
@@ -220,26 +181,6 @@ public class SingleImageActivity extends AppCompatActivity {
         selectImageButton.setLayoutParams(selectParams);
         layout.addView(selectImageButton);
         
-        // Preview image container
-        LinearLayout previewContainer = new LinearLayout(this);
-        previewContainer.setOrientation(LinearLayout.VERTICAL);
-        previewContainer.setGravity(Gravity.CENTER);
-        previewContainer.setPadding(16, 16, 16, 16);
-        
-        GradientDrawable previewBg = new GradientDrawable();
-        previewBg.setColor(0xFF252545);
-        previewBg.setCornerRadius(16);
-        previewContainer.setBackground(previewBg);
-        
-        // Original image label
-        TextView originalLabel = new TextView(this);
-        originalLabel.setText("Original Image");
-        originalLabel.setTextSize(12);
-        originalLabel.setTextColor(0xFF778DA9);
-        originalLabel.setGravity(Gravity.CENTER);
-        originalLabel.setPadding(0, 0, 0, 8);
-        previewContainer.addView(originalLabel);
-        
         // Preview image
         previewImage = new ImageView(this);
         previewImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -247,65 +188,46 @@ public class SingleImageActivity extends AppCompatActivity {
         previewImage.setAdjustViewBounds(true);
         LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            350
+            400
         );
+        imageParams.setMargins(0, 0, 0, 16);
         previewImage.setLayoutParams(imageParams);
-        previewContainer.addView(previewImage);
+        layout.addView(previewImage);
         
-        layout.addView(previewContainer);
-        
-        // Spacer
-        View spacer = new View(this);
-        spacer.setLayoutParams(new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 20));
-        layout.addView(spacer);
-        
-        // Processed image container
-        LinearLayout processedContainer = new LinearLayout(this);
+        // Processed image container (hidden initially)
+        processedContainer = new LinearLayout(this);
         processedContainer.setOrientation(LinearLayout.VERTICAL);
-        processedContainer.setGravity(Gravity.CENTER);
-        processedContainer.setPadding(16, 16, 16, 16);
         processedContainer.setVisibility(View.GONE);
         
-        GradientDrawable processedBg = new GradientDrawable();
-        processedBg.setColor(0xFF1E3A5F);
-        processedBg.setCornerRadius(16);
-        processedContainer.setBackground(processedBg);
-        
-        // Processed image label
         TextView processedLabel = new TextView(this);
-        processedLabel.setText("Analysis Result");
-        processedLabel.setTextSize(12);
+        processedLabel.setText("Analysis Result:");
+        processedLabel.setTextSize(14);
         processedLabel.setTextColor(0xFF00B4D8);
-        processedLabel.setGravity(Gravity.CENTER);
         processedLabel.setPadding(0, 0, 0, 8);
         processedContainer.addView(processedLabel);
         
-        // Processed image
-        processedImage = new ImageView(this);
-        processedImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        processedImage.setBackgroundColor(0xFF1E3A5F);
-        processedImage.setAdjustViewBounds(true);
-        LinearLayout.LayoutParams processedImageParams = new LinearLayout.LayoutParams(
+        processedImageView = new ImageView(this);
+        processedImageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        processedImageView.setBackgroundColor(0xFF1E3A5F);
+        processedImageView.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams processedParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            350
+            400
         );
-        processedImage.setLayoutParams(processedImageParams);
-        processedContainer.addView(processedImage);
+        processedImageView.setLayoutParams(processedParams);
+        processedContainer.addView(processedImageView);
         
         layout.addView(processedContainer);
         
         // Results panel
         resultsPanel = new LinearLayout(this);
         resultsPanel.setOrientation(LinearLayout.VERTICAL);
-        resultsPanel.setGravity(Gravity.CENTER);
         resultsPanel.setPadding(24, 24, 24, 24);
         resultsPanel.setVisibility(View.GONE);
         
         GradientDrawable resultsBg = new GradientDrawable();
         resultsBg.setColor(0xFF1A3A3A);
         resultsBg.setCornerRadius(16);
-        resultsBg.setStroke(2, 0xFF00B4D8);
         resultsPanel.setBackground(resultsBg);
         
         LinearLayout.LayoutParams resultsParams = new LinearLayout.LayoutParams(
@@ -315,21 +237,9 @@ public class SingleImageActivity extends AppCompatActivity {
         resultsParams.setMargins(0, 20, 0, 0);
         resultsPanel.setLayoutParams(resultsParams);
         
-        // Results title
-        TextView resultsTitle = new TextView(this);
-        resultsTitle.setText("📊 Detection Results");
-        resultsTitle.setTextSize(18);
-        resultsTitle.setTextColor(0xFF00B4D8);
-        resultsTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        resultsTitle.setGravity(Gravity.CENTER);
-        resultsTitle.setPadding(0, 0, 0, 12);
-        resultsPanel.addView(resultsTitle);
-        
-        // Results text
         resultsText = new TextView(this);
         resultsText.setTextSize(14);
         resultsText.setTextColor(0xFFE0E1DD);
-        resultsText.setGravity(Gravity.CENTER);
         resultsPanel.addView(resultsText);
         
         layout.addView(resultsPanel);
@@ -364,19 +274,22 @@ public class SingleImageActivity extends AppCompatActivity {
         setContentView(scrollView);
     }
     
+    /**
+     * Initialize models - SAME as ImageProcessingActivity
+     */
     private void initializeModels() {
         statusText.setText("Loading AI models...");
         
         executorService.execute(() -> {
             try {
-                // Initialize TFLite Face Detector
+                // Initialize TFLite Face Detector - same as ImageProcessingActivity
                 if (DemoConfig.USE_TFLITE_FACE_DETECTION) {
                     tfliteFaceDetector = new TFLiteFaceDetector(this);
                     tfliteFaceDetector.initialize();
                     Log.i(TAG, "TFLite Face Detector initialized");
                 }
                 
-                // Initialize QNN Landmark Detection
+                // Initialize QNN Landmark Detection - same as ImageProcessingActivity
                 landmark_detection_qnn = new QNNModelRunner();
                 boolean landmarkOk = landmark_detection_qnn.loadModel(
                     DemoConfig.landmark_detection_model_path,
@@ -388,7 +301,7 @@ public class SingleImageActivity extends AppCompatActivity {
                 }
                 Log.i(TAG, "Landmark detection model initialized");
                 
-                // Initialize QNN Gaze Estimation
+                // Initialize QNN Gaze Estimation - same as ImageProcessingActivity
                 gaze_estimation_qnn = new QNNModelRunner();
                 boolean gazeOk = gaze_estimation_qnn.loadModel(
                     DemoConfig.gaze_estimation_model_path,
@@ -435,313 +348,197 @@ public class SingleImageActivity extends AppCompatActivity {
         if (requestCode == REQUEST_IMAGE_PICKER && resultCode == Activity.RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
-                selectedImageUri = uri;
-                loadAndProcessImage(uri);
+                processSelectedImage(uri);
             }
         }
     }
     
-    private void loadAndProcessImage(Uri imageUri) {
-        // Pre-check: verify OpenCV is actually working
-        if (!isOpenCVReady) {
-            // Try reinitializing OpenCV
-            initLoadOpenCV();
-            if (!isOpenCVReady) {
-                statusText.setText("❌ OpenCV not available. Please restart the app.");
-                statusText.setTextColor(0xFFFF6B6B);
-                Toast.makeText(this, "OpenCV failed to load", Toast.LENGTH_LONG).show();
-                return;
-            }
-        }
-        
-        // Pre-check: verify models are loaded
-        if (!modelsReady) {
-            statusText.setText("⏳ Models still loading. Please wait...");
-            statusText.setTextColor(0xFFFFD700);
-            Toast.makeText(this, "Please wait for models to load", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
+    /**
+     * Process the selected image - uses SAME logic as ImageProcessingActivity.processImage()
+     */
+    private void processSelectedImage(Uri imageUri) {
         statusText.setText("Processing image...");
         statusText.setTextColor(0xFFFFD700);
         progressBar.setVisibility(View.VISIBLE);
         selectImageButton.setEnabled(false);
-        
-        // Hide results panel until processing is complete
         resultsPanel.setVisibility(View.GONE);
+        processedContainer.setVisibility(View.GONE);
         
         executorService.execute(() -> {
             try {
+                // ========== EXACT SAME LOGIC AS ImageProcessingActivity.processImage() ==========
+                
                 // Load image
                 InputStream inputStream = getContentResolver().openInputStream(imageUri);
                 if (inputStream == null) {
-                    throw new Exception("Failed to open image");
+                    Log.e(TAG, "Failed to open image: " + imageUri);
+                    showError("Failed to open image");
+                    return;
                 }
                 
-                Bitmap loadedBitmap = BitmapFactory.decodeStream(inputStream);
+                Bitmap originalBitmap = BitmapFactory.decodeStream(inputStream);
                 inputStream.close();
                 
-                if (loadedBitmap == null) {
-                    throw new Exception("Failed to decode image");
+                if (originalBitmap == null) {
+                    Log.e(TAG, "Failed to decode image: " + imageUri);
+                    showError("Failed to decode image");
+                    return;
                 }
                 
-                originalBitmap = loadedBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                // Show preview
+                final Bitmap previewBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, false);
+                mainHandler.post(() -> previewImage.setImageBitmap(previewBitmap));
                 
-                // Show original preview
-                mainHandler.post(() -> {
-                    previewImage.setImageBitmap(originalBitmap);
-                });
+                // Convert to Mat - SAME as ImageProcessingActivity
+                Mat img = bitmap2mat(originalBitmap);
+                int imgWidth = img.width();
+                int imgHeight = img.height();
                 
-                // Process image
-                ProcessingResult result = processImage(originalBitmap);
+                // === FACE DETECTION === (same as ImageProcessingActivity)
+                float[][] boxes = null;
                 
-                mainHandler.post(() -> {
-                    displayResults(result);
-                    statusText.setText("✓ Analysis complete!");
-                    statusText.setTextColor(0xFF00FF7F);
-                    progressBar.setVisibility(View.GONE);
-                    selectImageButton.setEnabled(true);
-                });
+                if (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) {
+                    Bitmap resizedBitmap = Bitmap.createScaledBitmap(originalBitmap, 
+                        DemoConfig.face_detection_input_W, DemoConfig.face_detection_input_H, true);
+                    
+                    boxes = tfliteFaceDetector.detectFaces(resizedBitmap);
+                    
+                    if (boxes != null) {
+                        float scaleX = (float) imgWidth / DemoConfig.face_detection_input_W;
+                        float scaleY = (float) imgHeight / DemoConfig.face_detection_input_H;
+                        for (float[] box : boxes) {
+                            box[0] *= scaleX;
+                            box[1] *= scaleY;
+                            box[2] *= scaleX;
+                            box[3] *= scaleY;
+                        }
+                    }
+                }
+                
+                if (boxes == null || boxes.length == 0) {
+                    Log.d(TAG, "No face detected");
+                    showResult(originalBitmap, null, null, null);
+                    return;
+                }
+                
+                float[] box = boxes[0];
+                Log.d(TAG, "Face detected at: " + box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3]);
+                
+                // === LANDMARK DETECTION === (same as ImageProcessingActivity)
+                ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
+                float[] landmark_detection_input = landmark_preprocess_result.input;
+                
+                int[] landmarkInputDims = {1, DemoConfig.landmark_detection_input_H, 
+                    DemoConfig.landmark_detection_input_W, DemoConfig.landmark_detection_input_C};
+                float[] landmarkOutput = landmark_detection_qnn.runInference(
+                    "face_image", landmark_detection_input, landmarkInputDims);
+                
+                if (landmarkOutput == null) {
+                    Log.e(TAG, "Landmark detection failed");
+                    showResult(originalBitmap, box, null, null);
+                    return;
+                }
+                
+                float[] landmark = landmark_postprocess(landmark_preprocess_result, landmarkOutput);
+                
+                // === GAZE ESTIMATION === (same as ImageProcessingActivity)
+                ProcessFactory.GazePreprocessResult gaze_preprocess_result = gaze_preprocess(img, landmark);
+                
+                String[] inputNames = {"left_eye", "right_eye", "face"};
+                float[][] inputDataArrays = {
+                    gaze_preprocess_result.leye,
+                    gaze_preprocess_result.reye,
+                    gaze_preprocess_result.face
+                };
+                int[][] inputDimsArrays = {
+                    {1, DemoConfig.gaze_estimation_eye_input_H, DemoConfig.gaze_estimation_eye_input_W, DemoConfig.gaze_estimation_eye_input_C},
+                    {1, DemoConfig.gaze_estimation_eye_input_H, DemoConfig.gaze_estimation_eye_input_W, DemoConfig.gaze_estimation_eye_input_C},
+                    {1, DemoConfig.gaze_estimation_face_input_H, DemoConfig.gaze_estimation_face_input_W, DemoConfig.gaze_estimation_face_input_C}
+                };
+                
+                float[] gazeOutput = gaze_estimation_qnn.runMultiInputInference(
+                    inputNames, inputDataArrays, inputDimsArrays);
+                
+                float[] gaze = null;
+                if (gazeOutput != null) {
+                    gaze = gaze_postprocess(gazeOutput, gaze_preprocess_result.R);
+                    Log.d(TAG, "Gaze: pitch=" + Math.toDegrees(gaze[0]) + "°, yaw=" + Math.toDegrees(gaze[1]) + "°");
+                }
+                
+                // Draw results on image
+                Bitmap resultBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                
+                if (gaze != null && landmark != null) {
+                    DrawUtils.drawgaze(img, gaze, landmark);
+                }
+                
+                Utils.matToBitmap(img, resultBitmap);
+                int[] pixels = new int[imgWidth * imgHeight];
+                resultBitmap.getPixels(pixels, 0, imgWidth, 0, 0, imgWidth, imgHeight);
+                
+                DrawUtils.drawbox(pixels, boxes, imgHeight, imgWidth);
+                DrawUtils.drawlandmark(pixels, landmark, imgHeight, imgWidth);
+                
+                resultBitmap.setPixels(pixels, 0, imgWidth, 0, 0, imgWidth, imgHeight);
+                
+                showResult(resultBitmap, box, landmark, gaze);
                 
             } catch (Exception e) {
                 Log.e(TAG, "Error processing image: " + e.getMessage(), e);
-                mainHandler.post(() -> {
-                    statusText.setText("❌ Error: " + e.getMessage());
-                    statusText.setTextColor(0xFFFF6B6B);
-                    progressBar.setVisibility(View.GONE);
-                    selectImageButton.setEnabled(true);
-                    Toast.makeText(this, "Processing failed", Toast.LENGTH_SHORT).show();
-                });
+                showError("Error: " + e.getMessage());
             }
         });
     }
     
-    private static class ProcessingResult {
-        boolean faceDetected = false;
-        float[] boundingBox = null;
-        float[] landmarks = null;
-        float[] gaze = null;  // pitch, yaw
-        Bitmap processedBitmap = null;
-        String errorMessage = null;
+    private void showError(String message) {
+        mainHandler.post(() -> {
+            statusText.setText("❌ " + message);
+            statusText.setTextColor(0xFFFF6B6B);
+            progressBar.setVisibility(View.GONE);
+            selectImageButton.setEnabled(true);
+        });
     }
     
-    private ProcessingResult processImage(Bitmap bitmap) {
-        ProcessingResult result = new ProcessingResult();
-        // Always set a default processedBitmap to avoid null issues
-        result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-        
-        if (!isOpenCVReady) {
-            result.errorMessage = "OpenCV not initialized. Please restart the app.";
-            Log.e(TAG, "OpenCV not ready when trying to process image");
-            return result;
-        }
-        
-        if (!modelsReady) {
-            result.errorMessage = "Models not loaded. Please wait and try again.";
-            return result;
-        }
-        
-        Mat img = null;
-        try {
-            // Convert to Mat - wrap in try-catch for OpenCV native errors
-            img = bitmap2mat(bitmap);
-            if (img == null || img.empty()) {
-                result.errorMessage = "Failed to convert image";
-                return result;
+    private void showResult(Bitmap processedBitmap, float[] box, float[] landmarks, float[] gaze) {
+        mainHandler.post(() -> {
+            progressBar.setVisibility(View.GONE);
+            selectImageButton.setEnabled(true);
+            
+            // Show processed image
+            if (processedBitmap != null) {
+                processedImageView.setImageBitmap(processedBitmap);
+                processedContainer.setVisibility(View.VISIBLE);
             }
-            int imgWidth = img.width();
-            int imgHeight = img.height();
             
-            // === FACE DETECTION ===
-            float[][] boxes = null;
+            // Build results text
+            StringBuilder sb = new StringBuilder();
             
-            if (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) {
-                // Resize image for face detection
-                Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, 
-                    DemoConfig.face_detection_input_W, DemoConfig.face_detection_input_H, true);
+            if (box == null) {
+                sb.append("⚠️ No face detected in the image.\n");
+                sb.append("Please select an image with a visible face.");
+                statusText.setText("No face detected");
+                statusText.setTextColor(0xFFFFD93D);
+            } else {
+                statusText.setText("✓ Analysis complete!");
+                statusText.setTextColor(0xFF00FF7F);
                 
-                boxes = tfliteFaceDetector.detectFaces(resizedBitmap);
+                sb.append("✓ Face Detected\n\n");
+                sb.append(String.format("📦 Box: (%.0f, %.0f) to (%.0f, %.0f)\n", box[0], box[1], box[2], box[3]));
                 
-                // Scale boxes back to original image size
-                if (boxes != null) {
-                    float scaleX = (float) imgWidth / DemoConfig.face_detection_input_W;
-                    float scaleY = (float) imgHeight / DemoConfig.face_detection_input_H;
-                    for (float[] box : boxes) {
-                        box[0] *= scaleX;
-                        box[1] *= scaleY;
-                        box[2] *= scaleX;
-                        box[3] *= scaleY;
-                    }
+                if (landmarks != null) {
+                    sb.append("🔵 Landmarks: ").append(landmarks.length / 2).append(" points\n");
+                }
+                
+                if (gaze != null) {
+                    float pitch = (float) Math.toDegrees(gaze[0]);
+                    float yaw = (float) Math.toDegrees(gaze[1]);
+                    sb.append(String.format("\n👁 Gaze:\n   Pitch: %.1f°\n   Yaw: %.1f°", pitch, yaw));
                 }
             }
             
-            if (boxes == null || boxes.length == 0) {
-                Log.d(TAG, "No face detected in image");
-                result.faceDetected = false;
-                result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-                
-                // Draw "No face detected" on image
-                Canvas canvas = new Canvas(result.processedBitmap);
-                Paint paint = new Paint();
-                paint.setColor(Color.RED);
-                paint.setTextSize(48);
-                paint.setTextAlign(Paint.Align.CENTER);
-                canvas.drawText("No Face Detected", imgWidth / 2f, imgHeight / 2f, paint);
-                
-                return result;
-            }
-            
-            result.faceDetected = true;
-            result.boundingBox = boxes[0];
-            float[] box = boxes[0];
-            
-            Log.d(TAG, "Face detected at: " + box[0] + ", " + box[1] + ", " + box[2] + ", " + box[3]);
-            
-            // === LANDMARK DETECTION ===
-            ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
-            float[] landmark_detection_input = landmark_preprocess_result.input;
-            
-            int[] landmarkInputDims = {1, DemoConfig.landmark_detection_input_H, 
-                DemoConfig.landmark_detection_input_W, DemoConfig.landmark_detection_input_C};
-            float[] landmarkOutput = landmark_detection_qnn.runInference(
-                "face_image", landmark_detection_input, landmarkInputDims);
-            
-            if (landmarkOutput == null) {
-                result.errorMessage = "Landmark detection failed";
-                result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-                return result;
-            }
-            
-            float[] landmark = landmark_postprocess(landmark_preprocess_result, landmarkOutput);
-            result.landmarks = landmark;
-            
-            Log.d(TAG, "Landmarks detected: " + landmark.length / 2 + " points");
-            
-            // === GAZE ESTIMATION ===
-            ProcessFactory.GazePreprocessResult gaze_preprocess_result = gaze_preprocess(img, landmark);
-            
-            String[] inputNames = {"left_eye", "right_eye", "face"};
-            float[][] inputDataArrays = {
-                gaze_preprocess_result.leye,
-                gaze_preprocess_result.reye,
-                gaze_preprocess_result.face
-            };
-            int[][] inputDimsArrays = {
-                {1, DemoConfig.gaze_estimation_eye_input_H, DemoConfig.gaze_estimation_eye_input_W, DemoConfig.gaze_estimation_eye_input_C},
-                {1, DemoConfig.gaze_estimation_eye_input_H, DemoConfig.gaze_estimation_eye_input_W, DemoConfig.gaze_estimation_eye_input_C},
-                {1, DemoConfig.gaze_estimation_face_input_H, DemoConfig.gaze_estimation_face_input_W, DemoConfig.gaze_estimation_face_input_C}
-            };
-            
-            float[] gazeOutput = gaze_estimation_qnn.runMultiInputInference(
-                inputNames, inputDataArrays, inputDimsArrays);
-            
-            if (gazeOutput != null) {
-                result.gaze = gaze_postprocess(gazeOutput, gaze_preprocess_result.R);
-                Log.d(TAG, "Gaze estimated: pitch=" + Math.toDegrees(result.gaze[0]) + 
-                    "°, yaw=" + Math.toDegrees(result.gaze[1]) + "°");
-            }
-            
-            // === DRAW RESULTS ON IMAGE ===
-            Bitmap processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-            
-            // Draw on the image using OpenCV utilities
-            if (result.gaze != null && result.landmarks != null) {
-                DrawUtils.drawgaze(img, result.gaze, result.landmarks);
-            }
-            
-            // Draw bounding box
-            int[] pixels = new int[imgWidth * imgHeight];
-            Utils.matToBitmap(img, processedBitmap);
-            processedBitmap.getPixels(pixels, 0, imgWidth, 0, 0, imgWidth, imgHeight);
-            
-            DrawUtils.drawbox(pixels, boxes, imgHeight, imgWidth);
-            
-            if (result.landmarks != null) {
-                DrawUtils.drawlandmark(pixels, result.landmarks, imgHeight, imgWidth);
-            }
-            
-            processedBitmap.setPixels(pixels, 0, imgWidth, 0, 0, imgWidth, imgHeight);
-            result.processedBitmap = processedBitmap;
-            
-        } catch (UnsatisfiedLinkError e) {
-            // OpenCV native library error
-            Log.e(TAG, "OpenCV native error in processImage: " + e.getMessage(), e);
-            result.errorMessage = "OpenCV native library error. Please restart the app.";
-            isOpenCVReady = false;  // Mark OpenCV as not ready
-        } catch (Exception e) {
-            Log.e(TAG, "Error in processImage: " + e.getMessage(), e);
-            result.errorMessage = e.getMessage();
-        } finally {
-            // Ensure processedBitmap is always set
-            if (result.processedBitmap == null) {
-                result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
-            }
-        }
-        
-        return result;
-    }
-    
-    private void displayResults(ProcessingResult result) {
-        // Show processed image
-        if (result.processedBitmap != null) {
-            processedImage.setImageBitmap(result.processedBitmap);
-            ((View) processedImage.getParent()).setVisibility(View.VISIBLE);
-        }
-        
-        // Build results text
-        StringBuilder sb = new StringBuilder();
-        
-        if (result.errorMessage != null) {
-            sb.append("❌ Error: ").append(result.errorMessage);
-            resultsText.setTextColor(0xFFFF6B6B);
-        } else if (!result.faceDetected) {
-            sb.append("No face detected in the image.\n");
-            sb.append("Please select an image with a visible face.");
-            resultsText.setTextColor(0xFFFFD93D);
-        } else {
-            resultsText.setTextColor(0xFFE0E1DD);
-            
-            sb.append("✓ Face Detected\n\n");
-            
-            if (result.boundingBox != null) {
-                sb.append("📦 Bounding Box:\n");
-                sb.append(String.format("   Position: (%.0f, %.0f) to (%.0f, %.0f)\n\n",
-                    result.boundingBox[0], result.boundingBox[1],
-                    result.boundingBox[2], result.boundingBox[3]));
-            }
-            
-            if (result.landmarks != null) {
-                sb.append("🔵 Landmarks: ").append(result.landmarks.length / 2).append(" points detected\n\n");
-            }
-            
-            if (result.gaze != null) {
-                float pitchDegrees = (float) Math.toDegrees(result.gaze[0]);
-                float yawDegrees = (float) Math.toDegrees(result.gaze[1]);
-                
-                sb.append("👁 Gaze Direction:\n");
-                sb.append(String.format("   Pitch: %.1f°", pitchDegrees));
-                if (pitchDegrees > 5) {
-                    sb.append(" (looking up)");
-                } else if (pitchDegrees < -5) {
-                    sb.append(" (looking down)");
-                } else {
-                    sb.append(" (level)");
-                }
-                sb.append("\n");
-                
-                sb.append(String.format("   Yaw: %.1f°", yawDegrees));
-                if (yawDegrees > 10) {
-                    sb.append(" (looking right)");
-                } else if (yawDegrees < -10) {
-                    sb.append(" (looking left)");
-                } else {
-                    sb.append(" (forward)");
-                }
-            }
-        }
-        
-        resultsText.setText(sb.toString());
-        resultsPanel.setVisibility(View.VISIBLE);
+            resultsText.setText(sb.toString());
+            resultsPanel.setVisibility(View.VISIBLE);
+        });
     }
     
     @Override
@@ -768,4 +565,3 @@ public class SingleImageActivity extends AppCompatActivity {
         super.onDestroy();
     }
 }
-

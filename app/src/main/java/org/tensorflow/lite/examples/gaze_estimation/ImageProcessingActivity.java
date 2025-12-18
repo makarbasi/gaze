@@ -148,10 +148,10 @@ public class ImageProcessingActivity extends AppCompatActivity {
             // Check if permission was granted and then open picker
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
                 Toast.makeText(this, "Full storage access granted!", Toast.LENGTH_SHORT).show();
-                showPathInputDialog(); // Now they can enter any path
+                showCustomFolderBrowser(); // Show our custom browser
             } else {
-                Toast.makeText(this, "Permission not granted. Using limited picker.", Toast.LENGTH_SHORT).show();
-                openFolderPicker();
+                Toast.makeText(this, "Permission not granted. You can still enter paths manually.", Toast.LENGTH_SHORT).show();
+                showCustomFolderBrowser();
             }
         }
     }
@@ -325,69 +325,140 @@ public class ImageProcessingActivity extends AppCompatActivity {
     }
     
     private void selectFolder() {
-        // Check if we have full storage access on Android 11+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                // Show dialog explaining why we need the permission
-                new AlertDialog.Builder(this)
-                    .setTitle("Storage Access Required")
-                    .setMessage("For full folder access, the app needs 'All Files Access' permission.\n\n" +
-                               "You can either:\n" +
-                               "1. Grant full access (recommended for batch processing)\n" +
-                               "2. Use limited picker (may not access all folders)")
-                    .setPositiveButton("Grant Full Access", (d, w) -> {
-                        try {
-                            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                            intent.setData(Uri.parse("package:" + getPackageName()));
-                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
-                        } catch (Exception e) {
-                            Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
-                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
-                        }
-                    })
-                    .setNegativeButton("Use Limited Picker", (d, w) -> {
-                        openFolderPicker();
-                    })
-                    .setNeutralButton("Enter Path", (d, w) -> {
-                        showPathInputDialog();
-                    })
-                    .show();
-                return;
-            }
-        }
-        openFolderPicker();
+        showCustomFolderBrowser();
     }
     
     private static final int REQUEST_MANAGE_STORAGE = 3;
     
-    private void openFolderPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        // Try to start in a common location
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            intent.putExtra("android.provider.extra.INITIAL_URI", 
-                Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADCIM"));
+    private void showCustomFolderBrowser() {
+        // Create custom dark-themed folder browser dialog
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog);
+        
+        // Create the main layout
+        LinearLayout dialogLayout = new LinearLayout(this);
+        dialogLayout.setOrientation(LinearLayout.VERTICAL);
+        dialogLayout.setPadding(40, 30, 40, 20);
+        dialogLayout.setBackgroundColor(0xFF1A1A2E);
+        
+        // Title
+        TextView titleText = new TextView(this);
+        titleText.setText("📁 Select Folder");
+        titleText.setTextSize(20);
+        titleText.setTextColor(0xFFFFFFFF);
+        titleText.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleText.setPadding(0, 0, 0, 20);
+        dialogLayout.addView(titleText);
+        
+        // Path input field
+        android.widget.EditText pathInput = new android.widget.EditText(this);
+        pathInput.setText("/data/local/tmp");
+        pathInput.setTextColor(0xFFFFFFFF);
+        pathInput.setHintTextColor(0xFF888888);
+        pathInput.setBackgroundColor(0xFF2D2D44);
+        pathInput.setPadding(20, 20, 20, 20);
+        pathInput.setHint("Enter folder path...");
+        dialogLayout.addView(pathInput);
+        
+        // Spacer
+        TextView spacer = new TextView(this);
+        spacer.setText("\nQuick Access:");
+        spacer.setTextColor(0xFFCCCCCC);
+        spacer.setTextSize(14);
+        dialogLayout.addView(spacer);
+        
+        // Quick access buttons container
+        LinearLayout buttonsLayout = new LinearLayout(this);
+        buttonsLayout.setOrientation(LinearLayout.VERTICAL);
+        buttonsLayout.setPadding(0, 10, 0, 10);
+        
+        // Common folder paths
+        String[][] quickPaths = {
+            {"/data/local/tmp", "📂 /data/local/tmp"},
+            {"/sdcard", "📱 /sdcard (Internal)"},
+            {"/sdcard/DCIM", "📷 DCIM"},
+            {"/sdcard/Download", "⬇️ Downloads"},
+            {"/sdcard/Pictures", "🖼️ Pictures"},
+            {"/storage/emulated/0", "💾 Storage Root"},
+        };
+        
+        for (String[] pathInfo : quickPaths) {
+            Button btn = new Button(this);
+            btn.setText(pathInfo[1]);
+            btn.setTextColor(0xFFFFFFFF);
+            btn.setBackgroundColor(0xFF3D3D5C);
+            btn.setAllCaps(false);
+            btn.setPadding(20, 10, 20, 10);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, 5, 0, 5);
+            btn.setLayoutParams(params);
+            
+            final String folderPath = pathInfo[0];
+            btn.setOnClickListener(v -> pathInput.setText(folderPath));
+            buttonsLayout.addView(btn);
         }
-        startActivityForResult(intent, REQUEST_FOLDER_PICKER);
+        
+        dialogLayout.addView(buttonsLayout);
+        
+        // Info text
+        TextView infoText = new TextView(this);
+        infoText.setText("\n💡 Tap a quick path or type your own path above");
+        infoText.setTextColor(0xFF888888);
+        infoText.setTextSize(12);
+        dialogLayout.addView(infoText);
+        
+        builder.setView(dialogLayout);
+        
+        // Buttons
+        builder.setPositiveButton("Select", (d, w) -> {
+            String path = pathInput.getText().toString().trim();
+            if (!path.isEmpty()) {
+                scanFolderByPath(path);
+            }
+        });
+        
+        builder.setNegativeButton("Cancel", null);
+        
+        builder.setNeutralButton("System Picker", (d, w) -> {
+            openSystemFolderPicker();
+        });
+        
+        AlertDialog dialog = builder.create();
+        dialog.show();
+        
+        // Style the dialog buttons
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(0xFF4CAF50);
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(0xFFFF5722);
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(0xFF2196F3);
     }
     
-    private void showPathInputDialog() {
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setHint("/sdcard/DCIM/Camera");
-        input.setText("/sdcard/");
-        
-        new AlertDialog.Builder(this)
-            .setTitle("Enter Folder Path")
-            .setMessage("Enter the full path to the folder with images:")
-            .setView(input)
-            .setPositiveButton("OK", (d, w) -> {
-                String path = input.getText().toString().trim();
-                if (!path.isEmpty()) {
-                    scanFolderByPath(path);
-                }
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
+    private void openSystemFolderPicker() {
+        // Check for permission first on Android 11+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            new AlertDialog.Builder(this)
+                .setTitle("Permission Required")
+                .setMessage("The system picker needs 'All Files Access' for full folder access. Grant permission?")
+                .setPositiveButton("Grant", (d, w) -> {
+                    try {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                        intent.setData(Uri.parse("package:" + getPackageName()));
+                        startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                    } catch (Exception e) {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                        startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                    }
+                })
+                .setNegativeButton("Skip", (d, w) -> openDocumentTreePicker())
+                .show();
+        } else {
+            openDocumentTreePicker();
+        }
+    }
+    
+    private void openDocumentTreePicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_FOLDER_PICKER);
     }
     
     private void scanFolderByPath(String path) {

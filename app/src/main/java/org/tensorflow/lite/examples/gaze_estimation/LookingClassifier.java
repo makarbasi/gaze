@@ -22,36 +22,33 @@ import java.nio.channels.FileChannel;
  * Classifier to determine if user is looking at the camera.
  * 
  * Uses a TFLite model trained on gaze, head pose, and eye landmark features.
- * Applies StandardScaler normalization using mean/scale from metadata.
- * 
- * Input features (41 total):
- *   - 7 core features: gaze_pitch, gaze_yaw, head_pitch, head_yaw, head_roll, relative_pitch, relative_yaw
- *   - 34 landmark features: eye landmarks (lm64-75, lm54, lm60-63)
+ * IMPORTANT: The exported TFLite models in this repo already include normalization
+ * inside the graph (see training scripts). This class therefore feeds RAW features
+ * in the exact order specified by the metadata "features" list.
  * 
  * Output: probability (0-1) that user is looking at camera
  */
 public class LookingClassifier {
     private static final String TAG = "LookingClassifier";
-    private static final String MODEL_PATH = "looking_classifier.tflite";
-    private static final String METADATA_PATH = "model_metadata.json";
-    
-    // Feature indices for landmarks (must match training order)
-    // Order: lm64, lm65, lm66, lm67, lm68, lm69, lm70, lm71, lm72, lm73, lm74, lm75, lm54, lm60, lm61, lm62, lm63
-    private static final int[] LANDMARK_INDICES = {64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 54, 60, 61, 62, 63};
-    
-    private static final int NUM_FEATURES = 41;
+    // Prefer v2 names; keep fallbacks for older asset naming.
+    private static final String MODEL_PATH_PRIMARY = "looking_classifier_v2.tflite";
+    private static final String MODEL_PATH_FALLBACK = "looking_classifier.tflite";
+    private static final String METADATA_PATH_PRIMARY = "model_metadata_v2.json";
+    private static final String METADATA_PATH_FALLBACK = "model_metadata.json";
+
     private static final float THRESHOLD = 0.5f;
     
     private Interpreter interpreter;
     private boolean isInitialized = false;
     
-    // Normalization parameters (from StandardScaler)
-    private float[] mean = null;
-    private float[] scale = null;
-    
-    // Reusable arrays for inference
-    private float[][] inputArray = new float[1][NUM_FEATURES];
-    private float[][] outputArray = new float[1][1];
+    // Feature list/order from metadata (must match training & model graph).
+    private String[] featureNames = null;
+    private FeatureSpec[] featureSpecs = null;
+    private int numFeatures = -1;
+
+    // Reusable arrays for inference (allocated after metadata is loaded)
+    private float[][] inputArray = null;
+    private final float[][] outputArray = new float[1][1];
     
     // Last prediction result
     private float lastProbability = 0f;
@@ -66,7 +63,7 @@ public class LookingClassifier {
         try {
             // Load normalization metadata first
             if (!loadMetadata(context)) {
-                Log.e(TAG, "Failed to load normalization metadata");
+                Log.e(TAG, "Failed to load model metadata");
                 return false;
             }
             
@@ -76,7 +73,7 @@ public class LookingClassifier {
             options.setNumThreads(2);
             interpreter = new Interpreter(modelBuffer, options);
             isInitialized = true;
-            Log.i(TAG, "✓ Looking classifier initialized with " + NUM_FEATURES + " features");
+            Log.i(TAG, "✓ Looking classifier initialized with " + numFeatures + " features");
             return true;
         } catch (Exception e) {
             Log.e(TAG, "Failed to initialize looking classifier: " + e.getMessage());
@@ -87,38 +84,63 @@ public class LookingClassifier {
     }
     
     /**
-     * Load normalization parameters from metadata JSON
+     * A small parsed representation of each feature to fill at runtime.
+     */
+    private static final class FeatureSpec {
+        enum Kind { GAZE_PITCH, GAZE_YAW, HEAD_PITCH, HEAD_YAW, HEAD_ROLL, REL_PITCH, REL_YAW, LANDMARK_X, LANDMARK_Y, UNKNOWN }
+        final Kind kind;
+        final int landmarkIndex; // only for LANDMARK_X / LANDMARK_Y
+        FeatureSpec(Kind kind, int landmarkIndex) {
+            this.kind = kind;
+            this.landmarkIndex = landmarkIndex;
+        }
+    }
+
+    /**
+     * Load metadata JSON from assets and precompute feature mapping.
+     *
+     * Expected keys:
+     *  - mean: [num_features] (for reference; model already embeds normalization)
+     *  - scale: [num_features] (for reference)
+     *  - features: [num_features] list of feature names in training order
      */
     private boolean loadMetadata(Context context) {
         try {
-            InputStream is = context.getAssets().open(METADATA_PATH);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
+            JSONObject json = readJsonAsset(context, METADATA_PATH_PRIMARY, METADATA_PATH_FALLBACK);
+            if (json == null) {
+                return false;
             }
-            reader.close();
-            
-            JSONObject json = new JSONObject(sb.toString());
-            
-            // Load mean array
-            JSONArray meanArray = json.getJSONArray("mean");
-            mean = new float[meanArray.length()];
-            for (int i = 0; i < meanArray.length(); i++) {
-                mean[i] = (float) meanArray.getDouble(i);
+
+            JSONArray featuresArray = json.optJSONArray("features");
+            if (featuresArray == null) {
+                Log.e(TAG, "Metadata missing 'features' array");
+                return false;
             }
-            
-            // Load scale array
-            JSONArray scaleArray = json.getJSONArray("scale");
-            scale = new float[scaleArray.length()];
-            for (int i = 0; i < scaleArray.length(); i++) {
-                scale[i] = (float) scaleArray.getDouble(i);
+
+            featureNames = new String[featuresArray.length()];
+            featureSpecs = new FeatureSpec[featuresArray.length()];
+            for (int i = 0; i < featuresArray.length(); i++) {
+                String name = featuresArray.getString(i);
+                featureNames[i] = name;
+                featureSpecs[i] = parseFeatureSpec(name);
             }
-            
-            Log.i(TAG, "Loaded normalization params: mean[" + mean.length + "], scale[" + scale.length + "]");
-            return mean.length == NUM_FEATURES && scale.length == NUM_FEATURES;
-            
+            numFeatures = featureNames.length;
+
+            // Allocate input buffer now that we know the correct size
+            inputArray = new float[1][numFeatures];
+
+            // Optional sanity check: mean/scale lengths should match feature length (but not required)
+            JSONArray meanArray = json.optJSONArray("mean");
+            JSONArray scaleArray = json.optJSONArray("scale");
+            if (meanArray != null && scaleArray != null &&
+                    (meanArray.length() != numFeatures || scaleArray.length() != numFeatures)) {
+                Log.w(TAG, "Metadata mean/scale length mismatch: mean=" +
+                        meanArray.length() + ", scale=" + scaleArray.length() +
+                        ", features=" + numFeatures);
+            }
+
+            Log.i(TAG, "Loaded metadata: features=" + numFeatures);
+            return numFeatures > 0;
         } catch (Exception e) {
             Log.e(TAG, "Error loading metadata: " + e.getMessage());
             e.printStackTrace();
@@ -130,12 +152,21 @@ public class LookingClassifier {
      * Load the TFLite model from assets
      */
     private MappedByteBuffer loadModelFile(Context context) throws IOException {
-        AssetFileDescriptor fileDescriptor = context.getAssets().openFd(MODEL_PATH);
-        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-        FileChannel fileChannel = inputStream.getChannel();
-        long startOffset = fileDescriptor.getStartOffset();
-        long declaredLength = fileDescriptor.getDeclaredLength();
-        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+        AssetFileDescriptor fileDescriptor;
+        try {
+            fileDescriptor = context.getAssets().openFd(MODEL_PATH_PRIMARY);
+            Log.i(TAG, "Using model asset: " + MODEL_PATH_PRIMARY);
+        } catch (IOException primaryErr) {
+            fileDescriptor = context.getAssets().openFd(MODEL_PATH_FALLBACK);
+            Log.w(TAG, "Using fallback model asset: " + MODEL_PATH_FALLBACK);
+        }
+
+        try (FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor())) {
+            FileChannel fileChannel = inputStream.getChannel();
+            long startOffset = fileDescriptor.getStartOffset();
+            long declaredLength = fileDescriptor.getDeclaredLength();
+            return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+        }
     }
     
     /**
@@ -175,22 +206,6 @@ public class LookingClassifier {
     }
     
     /**
-     * Apply StandardScaler normalization: (x - mean) / scale
-     */
-    private void normalizeFeatures() {
-        if (mean == null || scale == null) {
-            Log.w(TAG, "No normalization params, skipping");
-            return;
-        }
-        
-        for (int i = 0; i < NUM_FEATURES; i++) {
-            if (scale[i] != 0) {
-                inputArray[0][i] = (inputArray[0][i] - mean[i]) / scale[i];
-            }
-        }
-    }
-    
-    /**
      * Run inference to determine if user is looking at camera
      * 
      * @param gazePitchYaw Gaze pitch and yaw from gaze estimation (2 values)
@@ -201,6 +216,10 @@ public class LookingClassifier {
     public boolean predict(float[] gazePitchYaw, Mat rvec, float[] landmarks) {
         if (!isInitialized || interpreter == null) {
             Log.w(TAG, "Classifier not initialized");
+            return false;
+        }
+        if (inputArray == null || featureSpecs == null || numFeatures <= 0) {
+            Log.w(TAG, "Metadata not loaded");
             return false;
         }
         
@@ -224,33 +243,27 @@ public class LookingClassifier {
             float relative_pitch = gaze_pitch - head_pitch;
             float relative_yaw = gaze_yaw - head_yaw;
             
-            // Build input array (raw features)
-            int idx = 0;
-            
-            // Core features (7)
-            inputArray[0][idx++] = gaze_pitch;
-            inputArray[0][idx++] = gaze_yaw;
-            inputArray[0][idx++] = head_pitch;
-            inputArray[0][idx++] = head_yaw;
-            inputArray[0][idx++] = head_roll;
-            inputArray[0][idx++] = relative_pitch;
-            inputArray[0][idx++] = relative_yaw;
-            
-            // Landmark features (17 landmarks * 2 = 34)
-            if (landmarks != null && landmarks.length >= 196) {
-                for (int lmIdx : LANDMARK_INDICES) {
-                    inputArray[0][idx++] = landmarks[lmIdx * 2];     // x
-                    inputArray[0][idx++] = landmarks[lmIdx * 2 + 1]; // y
+            // Build input array (RAW features in training order).
+            // Do NOT apply StandardScaler normalization here — models are exported with normalization embedded.
+            for (int i = 0; i < numFeatures; i++) {
+                FeatureSpec spec = featureSpecs[i];
+                float v;
+                switch (spec.kind) {
+                    case GAZE_PITCH: v = gaze_pitch; break;
+                    case GAZE_YAW: v = gaze_yaw; break;
+                    case HEAD_PITCH: v = head_pitch; break;
+                    case HEAD_YAW: v = head_yaw; break;
+                    case HEAD_ROLL: v = head_roll; break;
+                    case REL_PITCH: v = relative_pitch; break;
+                    case REL_YAW: v = relative_yaw; break;
+                    case LANDMARK_X: v = getLandmarkCoord(landmarks, spec.landmarkIndex, true); break;
+                    case LANDMARK_Y: v = getLandmarkCoord(landmarks, spec.landmarkIndex, false); break;
+                    case UNKNOWN:
+                    default:
+                        v = 0f;
                 }
-            } else {
-                Log.w(TAG, "Missing landmarks, using zeros");
-                for (int i = 0; i < 34; i++) {
-                    inputArray[0][idx++] = 0;
-                }
+                inputArray[0][i] = v;
             }
-            
-            // Apply normalization: (x - mean) / scale
-            normalizeFeatures();
             
             // Run inference
             interpreter.run(inputArray, outputArray);
@@ -270,6 +283,77 @@ public class LookingClassifier {
             e.printStackTrace();
             return false;
         }
+    }
+
+    private static float getLandmarkCoord(float[] landmarks, int idx, boolean isX) {
+        if (landmarks == null) {
+            return 0f;
+        }
+        int base = idx * 2 + (isX ? 0 : 1);
+        if (base < 0 || base >= landmarks.length) {
+            return 0f;
+        }
+        return landmarks[base];
+    }
+
+    private static FeatureSpec parseFeatureSpec(String name) {
+        // Core features
+        switch (name) {
+            case "gaze_pitch": return new FeatureSpec(FeatureSpec.Kind.GAZE_PITCH, -1);
+            case "gaze_yaw": return new FeatureSpec(FeatureSpec.Kind.GAZE_YAW, -1);
+            case "head_pitch": return new FeatureSpec(FeatureSpec.Kind.HEAD_PITCH, -1);
+            case "head_yaw": return new FeatureSpec(FeatureSpec.Kind.HEAD_YAW, -1);
+            case "head_roll": return new FeatureSpec(FeatureSpec.Kind.HEAD_ROLL, -1);
+            case "relative_pitch": return new FeatureSpec(FeatureSpec.Kind.REL_PITCH, -1);
+            case "relative_yaw": return new FeatureSpec(FeatureSpec.Kind.REL_YAW, -1);
+        }
+
+        // Landmark features: lm{idx}_x or lm{idx}_y
+        // Example: lm64_x, lm60_y
+        if (name != null && name.startsWith("lm") && name.length() >= 5) {
+            try {
+                int underscore = name.indexOf('_');
+                if (underscore > 2 && underscore < name.length() - 2) {
+                    int lmIdx = Integer.parseInt(name.substring(2, underscore));
+                    String axis = name.substring(underscore + 1);
+                    if ("x".equals(axis)) {
+                        return new FeatureSpec(FeatureSpec.Kind.LANDMARK_X, lmIdx);
+                    } else if ("y".equals(axis)) {
+                        return new FeatureSpec(FeatureSpec.Kind.LANDMARK_Y, lmIdx);
+                    }
+                }
+            } catch (Exception ignored) {
+                // fall through
+            }
+        }
+
+        Log.w(TAG, "Unknown feature name in metadata: '" + name + "' (using 0)");
+        return new FeatureSpec(FeatureSpec.Kind.UNKNOWN, -1);
+    }
+
+    private static JSONObject readJsonAsset(Context context, String primary, String fallback) throws Exception {
+        JSONObject json = null;
+        Exception last = null;
+        for (String path : new String[]{primary, fallback}) {
+            if (path == null) continue;
+            try (InputStream is = context.getAssets().open(path);
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line);
+                }
+                json = new JSONObject(sb.toString());
+                Log.i(TAG, "Using metadata asset: " + path);
+                return json;
+            } catch (Exception e) {
+                last = e;
+            }
+        }
+        if (last != null) {
+            Log.e(TAG, "Failed to load metadata from assets. Tried: " + primary + ", " + fallback + ". Error: " + last.getMessage());
+        }
+        return null;
     }
     
     /**

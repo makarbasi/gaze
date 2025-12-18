@@ -1132,15 +1132,20 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                         // Always show overlay when ML classifier is active OR when calibrated
                         if (useMLClassifier || calibrated) {
                           if (displayGaze) {
+                            // Always show both percentages (per frame)
+                            float pLooking = Math.max(0f, Math.min(1f, lookingProbability));
+                            float pNotLooking = 1f - pLooking;
+                            String pctText = String.format("Looking %.0f%% | Not %.0f%%", pLooking * 100f, pNotLooking * 100f);
+
                             if (lookingAtCam) {
                               // Looking at camera - green overlay
                               gazeOverlay.setBackgroundColor(0x6000FF00);  // Semi-transparent green
-                              gazeStatusText.setText(String.format("✓ Looking %.0f%%", lookingProbability * 100));
+                              gazeStatusText.setText("✓ " + pctText);
                               gazeStatusText.setTextColor(0xFF00FF00);
                             } else {
                               // Not looking at camera - red overlay
                               gazeOverlay.setBackgroundColor(0x60FF0000);  // Semi-transparent red
-                              gazeStatusText.setText(String.format("✗ Not Looking %.0f%%", lookingProbability * 100));
+                              gazeStatusText.setText("✗ " + pctText);
                               gazeStatusText.setTextColor(0xFFFF0000);
                             }
                           } else {

@@ -94,21 +94,49 @@ public class SingleImageActivity extends AppCompatActivity {
     }
     
     private void initLoadOpenCV() {
+        // Try OpenCVLoader.initDebug() first
         boolean success = OpenCVLoader.initDebug();
         if (success) {
             Log.d(TAG, "OpenCV load success via initDebug()");
-            isOpenCVReady = true;
-            return;
+            // Verify it actually works by creating a test Mat
+            if (testOpenCVNative()) {
+                isOpenCVReady = true;
+                return;
+            }
         }
         
+        // Fallback: try loading the native library directly
         Log.w(TAG, "OpenCVLoader.initDebug() failed - trying System.loadLibrary()");
         try {
             System.loadLibrary("opencv_java4");
             Log.d(TAG, "OpenCV load success via System.loadLibrary()");
-            isOpenCVReady = true;
+            if (testOpenCVNative()) {
+                isOpenCVReady = true;
+            } else {
+                Log.e(TAG, "OpenCV native test failed even after library load");
+                isOpenCVReady = false;
+            }
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Failed to load opencv_java4: " + e.getMessage());
-            Toast.makeText(this, "OpenCV failed to load: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            isOpenCVReady = false;
+        }
+    }
+    
+    /**
+     * Test if OpenCV native library is actually working by creating a Mat
+     */
+    private boolean testOpenCVNative() {
+        try {
+            Mat testMat = new Mat();
+            testMat.release();
+            Log.d(TAG, "OpenCV native test passed");
+            return true;
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "OpenCV native test failed: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "OpenCV native test exception: " + e.getMessage());
+            return false;
         }
     }
     
@@ -414,6 +442,26 @@ public class SingleImageActivity extends AppCompatActivity {
     }
     
     private void loadAndProcessImage(Uri imageUri) {
+        // Pre-check: verify OpenCV is actually working
+        if (!isOpenCVReady) {
+            // Try reinitializing OpenCV
+            initLoadOpenCV();
+            if (!isOpenCVReady) {
+                statusText.setText("❌ OpenCV not available. Please restart the app.");
+                statusText.setTextColor(0xFFFF6B6B);
+                Toast.makeText(this, "OpenCV failed to load", Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        
+        // Pre-check: verify models are loaded
+        if (!modelsReady) {
+            statusText.setText("⏳ Models still loading. Please wait...");
+            statusText.setTextColor(0xFFFFD700);
+            Toast.makeText(this, "Please wait for models to load", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
         statusText.setText("Processing image...");
         statusText.setTextColor(0xFFFFD700);
         progressBar.setVisibility(View.VISIBLE);
@@ -479,20 +527,28 @@ public class SingleImageActivity extends AppCompatActivity {
     
     private ProcessingResult processImage(Bitmap bitmap) {
         ProcessingResult result = new ProcessingResult();
+        // Always set a default processedBitmap to avoid null issues
+        result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
         
         if (!isOpenCVReady) {
-            result.errorMessage = "OpenCV not initialized";
+            result.errorMessage = "OpenCV not initialized. Please restart the app.";
+            Log.e(TAG, "OpenCV not ready when trying to process image");
             return result;
         }
         
         if (!modelsReady) {
-            result.errorMessage = "Models not loaded";
+            result.errorMessage = "Models not loaded. Please wait and try again.";
             return result;
         }
         
+        Mat img = null;
         try {
-            // Convert to Mat
-            Mat img = bitmap2mat(bitmap);
+            // Convert to Mat - wrap in try-catch for OpenCV native errors
+            img = bitmap2mat(bitmap);
+            if (img == null || img.empty()) {
+                result.errorMessage = "Failed to convert image";
+                return result;
+            }
             int imgWidth = img.width();
             int imgHeight = img.height();
             
@@ -607,10 +663,19 @@ public class SingleImageActivity extends AppCompatActivity {
             processedBitmap.setPixels(pixels, 0, imgWidth, 0, 0, imgWidth, imgHeight);
             result.processedBitmap = processedBitmap;
             
+        } catch (UnsatisfiedLinkError e) {
+            // OpenCV native library error
+            Log.e(TAG, "OpenCV native error in processImage: " + e.getMessage(), e);
+            result.errorMessage = "OpenCV native library error. Please restart the app.";
+            isOpenCVReady = false;  // Mark OpenCV as not ready
         } catch (Exception e) {
             Log.e(TAG, "Error in processImage: " + e.getMessage(), e);
             result.errorMessage = e.getMessage();
-            result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+        } finally {
+            // Ensure processedBitmap is always set
+            if (result.processedBitmap == null) {
+                result.processedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+            }
         }
         
         return result;

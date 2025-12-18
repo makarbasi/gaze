@@ -607,7 +607,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // Temporal smoothing for stable detection
   private int lookingAtCameraCount = 0;
   private int notLookingAtCameraCount = 0;
-  private boolean isLookingAtCamera = false;
+  // Note: isLookingAtCamera is defined above with lookingClassifier fields
   
   // Running average for gaze (reduces jitter)
   private float smoothedPitch = 0f;

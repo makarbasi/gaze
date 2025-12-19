@@ -126,6 +126,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     gazeOverlay = findViewById(R.id.gaze_overlay);
     gazeStatusText = findViewById(R.id.gaze_status_text);
     calibrateButton = findViewById(R.id.calibrate_button);
+    lookingProbText = findViewById(R.id.looking_prob_text);
     
     // Apply saved calibration if auto_calibrate is enabled
     if (gazeConfig.autoCalibrate) {
@@ -513,14 +514,16 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Initialize Looking Classifier (determines if user is looking at camera)
     try {
       lookingClassifier = new LookingClassifier();
-      if (lookingClassifier.initialize(this)) {
+      boolean ok = lookingClassifier.initialize(this);
+      if (ok) {
         Log.i("LookingClassifier", "✓ Looking Classifier initialized successfully");
       } else {
-        Log.e("LookingClassifier", "Looking Classifier initialization failed");
-        lookingClassifier = null;
+        Log.e("LookingClassifier", "Looking Classifier initialization failed: " + lookingClassifier.getLastInitError());
+        // Keep the instance for debugging (isInitialized() will remain false)
       }
     } catch (Exception e) {
-      Log.e("LookingClassifier", "Looking Classifier error: " + e.getMessage());
+      Log.e("LookingClassifier", "Looking Classifier error: " + e.getMessage(), e);
+      // Keep null on hard crash here
       lookingClassifier = null;
     }
 
@@ -616,6 +619,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // UI elements for gaze tracking
   private View gazeOverlay;
   private TextView gazeStatusText;
+  private TextView lookingProbText;
   private Button calibrateButton;
   
   // Recording UI and state
@@ -1148,11 +1152,32 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                               gazeStatusText.setText("✗ " + pctText);
                               gazeStatusText.setTextColor(0xFFFF0000);
                             }
+
+                            // Also show it under the calibrate button
+                            if (lookingProbText != null) {
+                              lookingProbText.setText(pctText);
+                            }
+
+                            // Logcat (per processed frame)
+                            Log.d("LookingProb", pctText + " (looking=" + lookingAtCam + ")");
                           } else {
-                            // No face detected - yellow overlay
+                            // No gaze yet (or no face) - yellow overlay
                             gazeOverlay.setBackgroundColor(0x60FFFF00);  // Semi-transparent yellow
-                            gazeStatusText.setText("No Face Detected");
+
+                            final String statusText =
+                                hasFaceDetected
+                                    ? "Face detected, waiting for gaze/classifier..."
+                                    : "No Face Detected";
+
+                            gazeStatusText.setText(statusText);
                             gazeStatusText.setTextColor(0xFFFFFF00);
+
+                            if (lookingProbText != null) {
+                              lookingProbText.setText(statusText);
+                            }
+
+                            // Logcat (per processed frame)
+                            Log.d("LookingProb", statusText + " (hasFace=" + hasFaceDetected + ")");
                           }
                           // ALWAYS set visibility when ML or calibrated
                           gazeOverlay.setVisibility(View.VISIBLE);

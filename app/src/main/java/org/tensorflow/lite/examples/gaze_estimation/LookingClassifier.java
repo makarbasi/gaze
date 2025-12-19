@@ -40,6 +40,7 @@ public class LookingClassifier {
     
     private Interpreter interpreter;
     private boolean isInitialized = false;
+    private String lastInitError = null;
     
     // Feature list/order from metadata (must match training & model graph).
     private String[] featureNames = null;
@@ -61,9 +62,13 @@ public class LookingClassifier {
      */
     public boolean initialize(Context context) {
         try {
+            lastInitError = null;
             // Load normalization metadata first
             if (!loadMetadata(context)) {
                 Log.e(TAG, "Failed to load model metadata");
+                if (lastInitError == null) {
+                    lastInitError = "Failed to load metadata (unknown)";
+                }
                 return false;
             }
             
@@ -73,10 +78,12 @@ public class LookingClassifier {
             options.setNumThreads(2);
             interpreter = new Interpreter(modelBuffer, options);
             isInitialized = true;
+            lastInitError = null;
             Log.i(TAG, "✓ Looking classifier initialized with " + numFeatures + " features");
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "Failed to initialize looking classifier: " + e.getMessage());
+            lastInitError = e.getClass().getSimpleName() + ": " + e.getMessage();
+            Log.e(TAG, "Failed to initialize looking classifier: " + lastInitError);
             e.printStackTrace();
             isInitialized = false;
             return false;
@@ -108,12 +115,16 @@ public class LookingClassifier {
         try {
             JSONObject json = readJsonAsset(context, METADATA_PATH_PRIMARY, METADATA_PATH_FALLBACK);
             if (json == null) {
+                if (lastInitError == null) {
+                    lastInitError = "Could not open metadata asset(s)";
+                }
                 return false;
             }
 
             JSONArray featuresArray = json.optJSONArray("features");
             if (featuresArray == null) {
                 Log.e(TAG, "Metadata missing 'features' array");
+                lastInitError = "Metadata missing 'features' array";
                 return false;
             }
 
@@ -143,6 +154,7 @@ public class LookingClassifier {
             return numFeatures > 0;
         } catch (Exception e) {
             Log.e(TAG, "Error loading metadata: " + e.getMessage());
+            lastInitError = "Error loading metadata: " + e.getMessage();
             e.printStackTrace();
             return false;
         }
@@ -157,8 +169,15 @@ public class LookingClassifier {
             fileDescriptor = context.getAssets().openFd(MODEL_PATH_PRIMARY);
             Log.i(TAG, "Using model asset: " + MODEL_PATH_PRIMARY);
         } catch (IOException primaryErr) {
-            fileDescriptor = context.getAssets().openFd(MODEL_PATH_FALLBACK);
-            Log.w(TAG, "Using fallback model asset: " + MODEL_PATH_FALLBACK);
+            try {
+                fileDescriptor = context.getAssets().openFd(MODEL_PATH_FALLBACK);
+                Log.w(TAG, "Using fallback model asset: " + MODEL_PATH_FALLBACK);
+            } catch (IOException fallbackErr) {
+                lastInitError =
+                        "openFd failed for model assets: " + MODEL_PATH_PRIMARY + ", " + MODEL_PATH_FALLBACK +
+                        " (" + fallbackErr.getMessage() + ")";
+                throw fallbackErr;
+            }
         }
 
         try (FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor())) {
@@ -354,6 +373,13 @@ public class LookingClassifier {
             Log.e(TAG, "Failed to load metadata from assets. Tried: " + primary + ", " + fallback + ". Error: " + last.getMessage());
         }
         return null;
+    }
+
+    /**
+     * If initialization failed, this gives the last error seen (for UI/logcat debugging).
+     */
+    public String getLastInitError() {
+        return lastInitError;
     }
     
     /**

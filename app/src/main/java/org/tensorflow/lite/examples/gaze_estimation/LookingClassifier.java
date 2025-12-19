@@ -332,9 +332,10 @@ public class LookingClassifier {
         if (name != null && name.startsWith("lm") && name.length() >= 5) {
             try {
                 int underscore = name.indexOf('_');
-                if (underscore > 2 && underscore < name.length() - 2) {
+                // Allow 1-char axis ("x"/"y"): underscore must be before last char
+                if (underscore > 2 && underscore < name.length() - 1) {
                     int lmIdx = Integer.parseInt(name.substring(2, underscore));
-                    String axis = name.substring(underscore + 1);
+                    String axis = name.substring(underscore + 1).trim();
                     if ("x".equals(axis)) {
                         return new FeatureSpec(FeatureSpec.Kind.LANDMARK_X, lmIdx);
                     } else if ("y".equals(axis)) {

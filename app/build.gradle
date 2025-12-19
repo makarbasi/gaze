@@ -133,9 +133,11 @@ dependencies {
     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.0.0'
     implementation 'com.google.android.material:material:1.0.0'
 
-    // Build off of stable TensorFlow Lite (updated for better NNAPI/GPU support)
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
-    implementation 'org.tensorflow:tensorflow-lite-gpu:2.14.0'
+    // TensorFlow Lite runtime
+    // NOTE: looking_classifier_v2.tflite requires a newer TFLite runtime (FULLY_CONNECTED op v12).
+    def tfliteVersion = '2.16.1'
+    implementation "org.tensorflow:tensorflow-lite:${tfliteVersion}"
+    implementation "org.tensorflow:tensorflow-lite-gpu:${tfliteVersion}"
     implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'  // Added for FileUtil and model loading
     
     // QNN is now used for running DLC models (replaces SNPE)

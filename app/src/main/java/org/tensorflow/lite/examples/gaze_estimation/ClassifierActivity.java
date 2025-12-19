@@ -889,42 +889,16 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
                     Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
-
-                    // IMPORTANT: The v2 model in ml_model/ was trained on landmarks in FULL preview-frame coordinates
-                    // (see ml_model/data/*.csv where landmark values are ~600-1300), not the 480x480 crop space.
-                    // Map the 480x480 crop landmarks back into full preview-frame coordinates BEFORE feeding the classifier.
-                    float[] classifierLandmarks = landmark;
-                    Mat classifierRvec = gaze_preprocess_result.rvec;
-                    boolean ownsClassifierRvec = false;
-                    try {
-                      if (region != null && cropToRegionTransform != null && landmark != null && landmark.length >= 196) {
-                        classifierLandmarks = mapCropLandmarksToFullFrame(
-                            landmark, cropToRegionTransform, region.x, region.y);
-
-                        // Recompute head pose rvec using full-frame landmarks + full-frame camera matrix,
-                        // so head angles match the training distribution better.
-                        classifierRvec = new Mat();
-                        Mat tvecFull = new Mat();
-                        Mat camFull = GazeEstimationUtils.get_camera_matrix(previewWidth, previewHeight);
-                        GazeEstimationUtils.estimateHeadPose(classifierLandmarks, classifierRvec, tvecFull, camFull);
-                        tvecFull.release();
-                        camFull.release();
-                        ownsClassifierRvec = true;
-                      }
-                    } catch (Exception e) {
-                      Log.w("LookingClassifier", "Failed to map landmarks/recompute headpose for classifier, falling back: " + e.getMessage());
-                      classifierLandmarks = landmark;
-                      classifierRvec = gaze_preprocess_result.rvec;
-                      ownsClassifierRvec = false;
-                    }
-
-                    isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, classifierRvec, classifierLandmarks);
+                    // IMPORTANT:
+                    // The v2 model was trained on the SAME raw features we record (see recordFrame()):
+                    // - gaze_pitch/yaw from gaze_postprocess (radians)
+                    // - head pose from gaze_preprocess_result.rvec (same camera_matrix convention)
+                    // - landmarks from landmark_postprocess() (image coordinates of the SAME processed frame)
+                    //
+                    // So we must feed the classifier the *exact same* raw values without any extra remapping.
+                    isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
                     lookingProbability = lookingClassifier.getLastProbability();
                     Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
-
-                    if (ownsClassifierRvec && classifierRvec != null) {
-                      classifierRvec.release();
-                    }
                   } else {
                     Log.w("LookingClassifier", "Classifier not available: null=" + (lookingClassifier == null));
                   }

@@ -661,8 +661,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Apply region-of-interest cropping for wide FOV cameras
     // crop_offset_x: 0.0=left, 0.25=left-quarter, 0.5=center, 0.75=right-quarter, 1.0=right
     // crop_scale: 0.5=use half width (2x zoom), 1.0=use full width
-    Bitmap regionBitmap = extractRegion(rgbFrameBitmap, 
-        cropConfig.cropOffsetX, cropConfig.cropOffsetY, cropConfig.cropScale);
+    RegionResult region = extractRegionWithInfo(
+        rgbFrameBitmap, cropConfig.cropOffsetX, cropConfig.cropOffsetY, cropConfig.cropScale);
+    Bitmap regionBitmap = region.bitmap;
     
     //transform and crop the frame using ImageUtils with proper rotation
     final Canvas canvas = new Canvas(croppedBitmap);
@@ -675,6 +676,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         DemoConfig.crop_H,
         cropConfig.imgOrientation,
         MAINTAIN_ASPECT);
+
+    // Inverse transform for mapping crop-space landmarks back into full preview frame coordinates.
+    Matrix cropToRegionTransform = new Matrix();
+    regionToCropTransform.invert(cropToRegionTransform);
     
     canvas.drawBitmap(regionBitmap, regionToCropTransform, null);
 
@@ -884,9 +889,42 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
                     Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
-                    isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
+
+                    // IMPORTANT: The v2 model in ml_model/ was trained on landmarks in FULL preview-frame coordinates
+                    // (see ml_model/data/*.csv where landmark values are ~600-1300), not the 480x480 crop space.
+                    // Map the 480x480 crop landmarks back into full preview-frame coordinates BEFORE feeding the classifier.
+                    float[] classifierLandmarks = landmark;
+                    Mat classifierRvec = gaze_preprocess_result.rvec;
+                    boolean ownsClassifierRvec = false;
+                    try {
+                      if (region != null && cropToRegionTransform != null && landmark != null && landmark.length >= 196) {
+                        classifierLandmarks = mapCropLandmarksToFullFrame(
+                            landmark, cropToRegionTransform, region.x, region.y);
+
+                        // Recompute head pose rvec using full-frame landmarks + full-frame camera matrix,
+                        // so head angles match the training distribution better.
+                        classifierRvec = new Mat();
+                        Mat tvecFull = new Mat();
+                        Mat camFull = GazeEstimationUtils.get_camera_matrix(previewWidth, previewHeight);
+                        GazeEstimationUtils.estimateHeadPose(classifierLandmarks, classifierRvec, tvecFull, camFull);
+                        tvecFull.release();
+                        camFull.release();
+                        ownsClassifierRvec = true;
+                      }
+                    } catch (Exception e) {
+                      Log.w("LookingClassifier", "Failed to map landmarks/recompute headpose for classifier, falling back: " + e.getMessage());
+                      classifierLandmarks = landmark;
+                      classifierRvec = gaze_preprocess_result.rvec;
+                      ownsClassifierRvec = false;
+                    }
+
+                    isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, classifierRvec, classifierLandmarks);
                     lookingProbability = lookingClassifier.getLastProbability();
                     Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+
+                    if (ownsClassifierRvec && classifierRvec != null) {
+                      classifierRvec.release();
+                    }
                   } else {
                     Log.w("LookingClassifier", "Classifier not available: null=" + (lookingClassifier == null));
                   }
@@ -1372,6 +1410,69 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       LOGGER.e(e, "Failed to extract region, using full image");
       return source;
     }
+  }
+
+  private static final class RegionResult {
+    final Bitmap bitmap;
+    final int x;
+    final int y;
+    final int w;
+    final int h;
+    RegionResult(Bitmap bitmap, int x, int y, int w, int h) {
+      this.bitmap = bitmap;
+      this.x = x;
+      this.y = y;
+      this.w = w;
+      this.h = h;
+    }
+  }
+
+  /**
+   * Same as extractRegion(), but also returns the region origin/size in the source bitmap.
+   */
+  private RegionResult extractRegionWithInfo(Bitmap source, float offsetX, float offsetY, float scale) {
+    int srcW = source.getWidth();
+    int srcH = source.getHeight();
+
+    int regionW = (int) (srcW * scale);
+    int regionH = (int) (srcH * scale);
+    regionW = Math.max(regionW, 100);
+    regionH = Math.max(regionH, 100);
+
+    int x = (int) ((srcW - regionW) * offsetX);
+    int y = (int) ((srcH - regionH) * offsetY);
+    x = Math.max(0, Math.min(x, srcW - regionW));
+    y = Math.max(0, Math.min(y, srcH - regionH));
+
+    try {
+      Bitmap region = Bitmap.createBitmap(source, x, y, regionW, regionH);
+      return new RegionResult(region, x, y, regionW, regionH);
+    } catch (Exception e) {
+      LOGGER.e(e, "Failed to extract region, using full image");
+      return new RegionResult(source, 0, 0, srcW, srcH);
+    }
+  }
+
+  /**
+   * Map landmarks from 480x480 crop coordinates back into full preview-frame coordinates.
+   *
+   * @param cropLandmarks 196 floats (98 points x,y) in crop space
+   * @param cropToRegionTransform inverse matrix of regionToCropTransform
+   * @param regionX x origin of the region inside the full preview frame
+   * @param regionY y origin of the region inside the full preview frame
+   */
+  private float[] mapCropLandmarksToFullFrame(
+      float[] cropLandmarks, Matrix cropToRegionTransform, int regionX, int regionY) {
+    float[] out = new float[cropLandmarks.length];
+    float[] pt = new float[2];
+    for (int i = 0; i < cropLandmarks.length / 2; i++) {
+      pt[0] = cropLandmarks[i * 2];
+      pt[1] = cropLandmarks[i * 2 + 1];
+      cropToRegionTransform.mapPoints(pt);
+      out[i * 2] = pt[0] + regionX;
+      out[i * 2 + 1] = pt[1] + regionY;
+    }
+    return out;
   }
   
   /**

@@ -89,6 +89,13 @@ public abstract class CameraActivity extends AppCompatActivity
   private Runnable postInferenceCallback;
   private Runnable imageConverter;
   private LinearLayout bottomSheetLayout;
+
+  // ==========================================================
+  // Performance: frame skipping (process 1 in N frames)
+  // ==========================================================
+  // Quick win: N=3 => ~3x less compute load at the cost of lower temporal resolution.
+  private static final int PROCESS_EVERY_N_FRAMES = 3;
+  private int frameCounter = 0;
   private LinearLayout gestureLayout;
   private BottomSheetBehavior sheetBehavior;
   protected TextView recognitionTextView,
@@ -476,6 +483,13 @@ public abstract class CameraActivity extends AppCompatActivity
       return;
     }
 
+    // Skip frames to reduce processing load (still return the buffer to camera).
+    frameCounter++;
+    if (PROCESS_EVERY_N_FRAMES > 1 && (frameCounter % PROCESS_EVERY_N_FRAMES) != 0) {
+      camera.addCallbackBuffer(bytes);
+      return;
+    }
+
     isProcessingFrame = true;
     yuvBytes[0] = bytes;
     yRowStride = previewWidth;
@@ -520,6 +534,14 @@ public abstract class CameraActivity extends AppCompatActivity
       }
 
       if (isProcessingFrame) {
+        image.close();
+        return;
+      }
+
+      // Skip frames to reduce processing load.
+      // Important: close the Image to avoid stalling the camera pipeline.
+      frameCounter++;
+      if (PROCESS_EVERY_N_FRAMES > 1 && (frameCounter % PROCESS_EVERY_N_FRAMES) != 0) {
         image.close();
         return;
       }

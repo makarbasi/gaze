@@ -6,7 +6,6 @@ import android.util.Log;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
-import org.tensorflow.lite.support.common.FileUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -69,7 +68,7 @@ public class TFLiteGazeEstimator {
         
         // Load gaze estimation model
         Log.i(TAG, "Loading Gaze Estimation model...");
-        MappedByteBuffer modelBuffer = FileUtil.loadMappedFile(context, "gaze_estimation.tflite");
+        MappedByteBuffer modelBuffer = AssetUtils.loadMappedFile(context, "gaze_estimation.tflite");
         
         Interpreter.Options options = new Interpreter.Options();
         

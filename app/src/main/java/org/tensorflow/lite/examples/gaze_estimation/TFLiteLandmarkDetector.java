@@ -6,7 +6,6 @@ import android.util.Log;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
-import org.tensorflow.lite.support.common.FileUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -54,7 +53,7 @@ public class TFLiteLandmarkDetector {
         
         // Load landmark detection model
         Log.i(TAG, "Loading Landmark Detection model...");
-        MappedByteBuffer modelBuffer = FileUtil.loadMappedFile(context, "landmark_detection.tflite");
+        MappedByteBuffer modelBuffer = AssetUtils.loadMappedFile(context, "landmark_detection.tflite");
         
         Interpreter.Options options = new Interpreter.Options();
         

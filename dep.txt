@@ -1,0 +1,144 @@
+
+> Configure project :app
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :opencv
+OpenCV: 4.5.5 C:\Users\makar\OneDrive\OLD\E-Learning\projects\other\ACE\gaze\opencv\build.gradle
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Task :app:dependencies
+
+------------------------------------------------------------
+Project ':app'
+------------------------------------------------------------
+
+debugRuntimeClasspath - Resolved configuration for runtime for variant: debug
++--- androidx.appcompat:appcompat:1.0.0
+|    +--- androidx.annotation:annotation:1.0.0
+|    +--- androidx.core:core:1.0.0
+|    |    +--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.collection:collection:1.0.0
+|    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.lifecycle:lifecycle-runtime:2.0.0
+|    |    |    +--- androidx.lifecycle:lifecycle-common:2.0.0
+|    |    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    |    +--- androidx.arch.core:core-common:2.0.0
+|    |    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    \--- androidx.versionedparcelable:versionedparcelable:1.0.0
+|    |         +--- androidx.annotation:annotation:1.0.0
+|    |         \--- androidx.collection:collection:1.0.0 (*)
+|    +--- androidx.collection:collection:1.0.0 (*)
+|    +--- androidx.cursoradapter:cursoradapter:1.0.0
+|    |    \--- androidx.annotation:annotation:1.0.0
+|    +--- androidx.legacy:legacy-support-core-utils:1.0.0
+|    |    +--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.core:core:1.0.0 (*)
+|    |    +--- androidx.documentfile:documentfile:1.0.0
+|    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.loader:loader:1.0.0
+|    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    +--- androidx.lifecycle:lifecycle-livedata:2.0.0
+|    |    |    |    +--- androidx.arch.core:core-runtime:2.0.0
+|    |    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    |    \--- androidx.arch.core:core-common:2.0.0 (*)
+|    |    |    |    +--- androidx.lifecycle:lifecycle-livedata-core:2.0.0
+|    |    |    |    |    +--- androidx.lifecycle:lifecycle-common:2.0.0 (*)
+|    |    |    |    |    +--- androidx.arch.core:core-common:2.0.0 (*)
+|    |    |    |    |    \--- androidx.arch.core:core-runtime:2.0.0 (*)
+|    |    |    |    \--- androidx.arch.core:core-common:2.0.0 (*)
+|    |    |    \--- androidx.lifecycle:lifecycle-viewmodel:2.0.0
+|    |    |         \--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.localbroadcastmanager:localbroadcastmanager:1.0.0
+|    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    \--- androidx.print:print:1.0.0
+|    |         \--- androidx.annotation:annotation:1.0.0
+|    +--- androidx.fragment:fragment:1.0.0
+|    |    +--- androidx.core:core:1.0.0 (*)
+|    |    +--- androidx.legacy:legacy-support-core-ui:1.0.0
+|    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    +--- androidx.legacy:legacy-support-core-utils:1.0.0 (*)
+|    |    |    +--- androidx.customview:customview:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    \--- androidx.core:core:1.0.0 (*)
+|    |    |    +--- androidx.viewpager:viewpager:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    |    \--- androidx.customview:customview:1.0.0 (*)
+|    |    |    +--- androidx.coordinatorlayout:coordinatorlayout:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    |    \--- androidx.customview:customview:1.0.0 (*)
+|    |    |    +--- androidx.drawerlayout:drawerlayout:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    |    \--- androidx.customview:customview:1.0.0 (*)
+|    |    |    +--- androidx.slidingpanelayout:slidingpanelayout:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    |    \--- androidx.customview:customview:1.0.0 (*)
+|    |    |    +--- androidx.interpolator:interpolator:1.0.0
+|    |    |    |    \--- androidx.annotation:annotation:1.0.0
+|    |    |    +--- androidx.swiperefreshlayout:swiperefreshlayout:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    +--- androidx.core:core:1.0.0 (*)
+|    |    |    |    \--- androidx.interpolator:interpolator:1.0.0 (*)
+|    |    |    +--- androidx.asynclayoutinflater:asynclayoutinflater:1.0.0
+|    |    |    |    +--- androidx.annotation:annotation:1.0.0
+|    |    |    |    \--- androidx.core:core:1.0.0 (*)
+|    |    |    \--- androidx.cursoradapter:cursoradapter:1.0.0 (*)
+|    |    +--- androidx.legacy:legacy-support-core-utils:1.0.0 (*)
+|    |    +--- androidx.annotation:annotation:1.0.0
+|    |    +--- androidx.loader:loader:1.0.0 (*)
+|    |    \--- androidx.lifecycle:lifecycle-viewmodel:2.0.0 (*)
+|    +--- androidx.vectordrawable:vectordrawable:1.0.0
+|    |    +--- androidx.annotation:annotation:1.0.0
+|    |    \--- androidx.core:core:1.0.0 (*)
+|    \--- androidx.vectordrawable:vectordrawable-animated:1.0.0
+|         +--- androidx.vectordrawable:vectordrawable:1.0.0 (*)
+|         \--- androidx.legacy:legacy-support-core-ui:1.0.0 (*)
++--- androidx.coordinatorlayout:coordinatorlayout:1.0.0 (*)
++--- com.google.android.material:material:1.0.0
+|    +--- androidx.annotation:annotation:1.0.0
+|    +--- androidx.core:core:1.0.0 (*)
+|    +--- androidx.legacy:legacy-support-core-ui:1.0.0 (*)
+|    +--- androidx.legacy:legacy-support-core-utils:1.0.0 (*)
+|    +--- androidx.fragment:fragment:1.0.0 (*)
+|    +--- androidx.transition:transition:1.0.0
+|    |    +--- androidx.annotation:annotation:1.0.0
+|    |    \--- androidx.core:core:1.0.0 (*)
+|    +--- androidx.appcompat:appcompat:1.0.0 (*)
+|    +--- androidx.cardview:cardview:1.0.0
+|    |    \--- androidx.annotation:annotation:1.0.0
+|    \--- androidx.recyclerview:recyclerview:1.0.0
+|         +--- androidx.annotation:annotation:1.0.0
+|         +--- androidx.core:core:1.0.0 (*)
+|         \--- androidx.legacy:legacy-support-core-ui:1.0.0 (*)
++--- org.tensorflow:tensorflow-lite:2.16.1
+|    \--- org.tensorflow:tensorflow-lite-api:2.16.1
++--- org.tensorflow:tensorflow-lite-gpu:2.16.1
+|    \--- org.tensorflow:tensorflow-lite-api:2.16.1
++--- org.tensorflow:tensorflow-lite-support:0.4.4
+|    +--- org.tensorflow:tensorflow-lite-support-api:0.4.4
+|    |    +--- org.checkerframework:checker-qual:2.5.8
+|    |    +--- org.tensorflow:tensorflow-lite-api:2.13.0 -> 2.16.1
+|    |    \--- com.google.android.odml:image:1.0.0-beta1
+|    \--- org.tensorflow:tensorflow-lite:2.13.0 -> 2.16.1 (*)
++--- :platform-validator
++--- :qtld-release
+\--- project :opencv
+
+(*) - Indicates repeated occurrences of a transitive dependency subtree. Gradle expands transitive dependency subtrees only once per project; repeat occurrences only display the root of the subtree, followed by this annotation.
+
+A web-based, searchable dependency report is available by adding the --scan option.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.9/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2s
+1 actionable task: 1 executed

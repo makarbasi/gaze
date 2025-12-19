@@ -8,7 +8,6 @@ import android.util.Log;
 
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
-import org.tensorflow.lite.support.common.FileUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -67,7 +66,7 @@ public class TFLiteFaceDetector {
         
         // Load face detection model
         Log.i(TAG, "Loading Face Detection model...");
-        MappedByteBuffer faceDetModelBuffer = FileUtil.loadMappedFile(context, "face_detection.tflite");
+        MappedByteBuffer faceDetModelBuffer = AssetUtils.loadMappedFile(context, "face_detection.tflite");
         
         Interpreter.Options options = new Interpreter.Options();
         

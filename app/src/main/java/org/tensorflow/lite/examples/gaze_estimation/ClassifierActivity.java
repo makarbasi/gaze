@@ -120,6 +120,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private volatile float latestHeadRoll = 0f;
   private volatile boolean hasHeadPose = false;
   
+  // Processed FPS (how many frames actually run through processImage() per second).
+  private long fpsWindowStartMs = 0L;
+  private int fpsWindowFrames = 0;
+  private volatile float processedFps = 0f;
+  
   // Minimal overlay mode (UI)
   private volatile boolean minimalModeEnabled = false;
   private SwitchCompat minimalModeSwitch;
@@ -722,6 +727,21 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       return rgbFrameBitmap;
     }
     
+    // Update processed FPS stats (counts only processed frames, not camera frames).
+    final long nowMs = SystemClock.uptimeMillis();
+    if (fpsWindowStartMs == 0L) {
+      fpsWindowStartMs = nowMs;
+      fpsWindowFrames = 0;
+      processedFps = 0f;
+    }
+    fpsWindowFrames++;
+    final long elapsedMs = nowMs - fpsWindowStartMs;
+    if (elapsedMs >= 1000L) {
+      processedFps = (fpsWindowFrames * 1000f) / Math.max(1L, elapsedMs);
+      fpsWindowStartMs = nowMs;
+      fpsWindowFrames = 0;
+    }
+    
     final boolean minimalMode = minimalModeEnabled;
     
     // Check if required networks are initialized (using QNN now)
@@ -1236,7 +1256,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   new Runnable() {
                     @Override
                     public void run() {
-                      showFrameInfo(rgbFrameBitmap.getWidth() + "x" + rgbFrameBitmap.getHeight());
+                      showFrameInfo(String.format(Locale.US, "%.1f FPS", processedFps));
                       showCropInfo(cropCopyBitmap.getWidth() + "x" + cropCopyBitmap.getHeight());
                       showCameraResolution(canvas.getWidth() + "x" + canvas.getHeight());
                       showRotationInfo(String.valueOf(sensorOrientation));

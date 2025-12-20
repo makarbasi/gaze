@@ -129,6 +129,16 @@
             android:textColor="@android:color/black"
             android:textSize="12sp" />
 
+        <!-- Fisheye correction toggle (disables fisheye processing when OFF) -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_fisheye"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Fisheye correction"
+            android:textColor="@android:color/black"
+            android:textSize="12sp" />
+
         <!-- Recording controls - below the split view -->
         <LinearLayout
             android:layout_width="match_parent"

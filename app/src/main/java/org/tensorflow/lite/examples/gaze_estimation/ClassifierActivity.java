@@ -117,6 +117,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // Minimal overlay mode (UI)
   private volatile boolean minimalModeEnabled = false;
   private SwitchCompat minimalModeSwitch;
+  
+  // Fisheye toggle (UI). When OFF, fisheye correction is never executed.
+  private volatile boolean fisheyeUiEnabled = true;
+  private SwitchCompat fisheyeSwitch;
   private View cameraContainer;
   private View regionPreviewContainer;
   private ImageView faceImageView;
@@ -140,6 +144,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     
     // Minimal overlay mode UI elements
     minimalModeSwitch = findViewById(R.id.switch_minimal_mode);
+    fisheyeSwitch = findViewById(R.id.switch_fisheye);
     cameraContainer = findViewById(R.id.container); // Camera preview host (TextureView fragment)
     regionPreviewContainer = findViewById(R.id.region_preview_container);
     faceImageView = findViewById(R.id.faceImageView);
@@ -151,6 +156,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       minimalModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
         minimalModeEnabled = isChecked;
         applyMinimalModeUi(isChecked);
+      });
+    }
+    if (fisheyeSwitch != null) {
+      fisheyeSwitch.setChecked(fisheyeUiEnabled);
+      fisheyeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        fisheyeUiEnabled = isChecked;
       });
     }
     applyMinimalModeUi(minimalModeEnabled);
@@ -882,7 +893,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
         
         // Apply fisheye correction to the face crop if enabled
-        if (displayConfig.fisheyeEnabled) {
+        if (fisheyeUiEnabled && displayConfig.fisheyeEnabled) {
           // The landmark input is a 112x112x3 float array, convert to bitmap, correct, convert back
           Bitmap faceCropForCorrection = floatArrayToBitmap(landmark_preprocess_result.input, 112, 112);
           Bitmap correctedFaceCrop = applyFisheyeCorrection(faceCropForCorrection, displayConfig.fisheyeStrength, displayConfig.fisheyeZoom);

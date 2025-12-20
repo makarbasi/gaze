@@ -69,7 +69,8 @@ public class DemoConfig {
     final public static int Preview_W = 480;
     final public static int crop_W = 480;
     final public static int crop_H = 480;
-    final public static int img_orientation = 90;
+    // No forced rotation by default. (Use DisplayConfig/display_config.json if you need rotation.)
+    final public static int img_orientation = 0;
 
 
     public static int getFaceDetectionInputsize(){

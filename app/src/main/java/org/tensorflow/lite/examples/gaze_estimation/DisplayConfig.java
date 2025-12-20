@@ -49,13 +49,13 @@ public class DisplayConfig {
     public static final String CONFIG_PATH = "/data/local/tmp/display_config.json";
     
     // Default values - Display
-    public float previewRotation = -90f;      // Main preview rotation
-    public float detectionRotation = 90f;     // Detection/landmark display rotation
+    public float previewRotation = 0f;        // Main preview rotation
+    public float detectionRotation = 0f;      // Detection/landmark display rotation
     public float previewScaleX = 1.0f;        // Preview horizontal scale (-1 to flip)
     public float previewScaleY = 1.0f;        // Preview vertical scale (-1 to flip)
     public float detectionScaleX = 1.0f;      // Detection horizontal scale
     public float detectionScaleY = 1.0f;      // Detection vertical scale
-    public int imgOrientation = 90;           // Crop transformation rotation
+    public int imgOrientation = 0;            // Crop transformation rotation
     
     // Fisheye camera settings
     public boolean fisheyeEnabled = false;    // Enable fisheye undistortion

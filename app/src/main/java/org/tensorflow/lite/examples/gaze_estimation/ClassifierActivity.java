@@ -1297,7 +1297,16 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
                             // Also show it under the calibrate button
                             if (lookingProbText != null) {
-                              lookingProbText.setText(pctText);
+                              final String headText =
+                                  hasHeadPose
+                                      ? String.format(
+                                          Locale.US,
+                                          "Head P %.0f° | Y %.0f° | R %.0f°",
+                                          Math.toDegrees(latestHeadPitch),
+                                          Math.toDegrees(latestHeadYaw),
+                                          Math.toDegrees(latestHeadRoll))
+                                      : "Head P -- | Y -- | R --";
+                              lookingProbText.setText(pctText + "\n" + headText);
                             }
 
                             // Logcat (per processed frame)
@@ -1317,7 +1326,16 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                             gazeStatusText.setTextColor(0xFFFFFF00);
 
                             if (lookingProbText != null) {
-                              lookingProbText.setText(statusText);
+                              final String headText =
+                                  hasHeadPose
+                                      ? String.format(
+                                          Locale.US,
+                                          "Head P %.0f° | Y %.0f° | R %.0f°",
+                                          Math.toDegrees(latestHeadPitch),
+                                          Math.toDegrees(latestHeadYaw),
+                                          Math.toDegrees(latestHeadRoll))
+                                      : "Head P -- | Y -- | R --";
+                              lookingProbText.setText(statusText + "\n" + headText);
                             }
 
                             // Logcat (per processed frame)

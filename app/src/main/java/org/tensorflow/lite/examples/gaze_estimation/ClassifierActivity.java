@@ -34,6 +34,7 @@ import android.widget.CheckBox;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.widget.SwitchCompat;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -112,6 +113,15 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private LookingClassifier lookingClassifier = null;
   private volatile boolean isLookingAtCamera = false;
   private volatile float lookingProbability = 0f;
+  
+  // Minimal overlay mode (UI)
+  private volatile boolean minimalModeEnabled = false;
+  private SwitchCompat minimalModeSwitch;
+  private View cameraContainer;
+  private View regionPreviewContainer;
+  private ImageView faceImageView;
+  private View regionLabel;
+  private View faceLabel;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -127,6 +137,23 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     gazeStatusText = findViewById(R.id.gaze_status_text);
     calibrateButton = findViewById(R.id.calibrate_button);
     lookingProbText = findViewById(R.id.looking_prob_text);
+    
+    // Minimal overlay mode UI elements
+    minimalModeSwitch = findViewById(R.id.switch_minimal_mode);
+    cameraContainer = findViewById(R.id.container); // Camera preview host (TextureView fragment)
+    regionPreviewContainer = findViewById(R.id.region_preview_container);
+    faceImageView = findViewById(R.id.faceImageView);
+    regionLabel = findViewById(R.id.region_label);
+    faceLabel = findViewById(R.id.face_label);
+    
+    if (minimalModeSwitch != null) {
+      minimalModeSwitch.setChecked(minimalModeEnabled);
+      minimalModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+        minimalModeEnabled = isChecked;
+        applyMinimalModeUi(isChecked);
+      });
+    }
+    applyMinimalModeUi(minimalModeEnabled);
     
     // Apply saved calibration if auto_calibrate is enabled
     if (gazeConfig.autoCalibrate) {
@@ -222,6 +249,37 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           }
         }
       });
+    }
+  }
+  
+  /**
+   * Minimal overlay mode:
+   * - no camera preview
+   * - no region/face preview bitmaps
+   * - overlay stays visible and turns green/red
+   *
+   * Important: keep the TextureView surface alive (INVISIBLE not GONE) for Camera2.
+   */
+  private void applyMinimalModeUi(boolean enabled) {
+    if (cameraContainer != null) {
+      cameraContainer.setVisibility(enabled ? View.INVISIBLE : View.VISIBLE);
+    }
+    if (regionPreviewContainer != null) {
+      regionPreviewContainer.setVisibility(enabled ? View.GONE : View.VISIBLE);
+    }
+    if (faceImageView != null) {
+      faceImageView.setVisibility(enabled ? View.GONE : View.VISIBLE);
+    }
+    if (regionLabel != null) {
+      regionLabel.setVisibility(enabled ? View.GONE : View.VISIBLE);
+    }
+    if (faceLabel != null) {
+      faceLabel.setVisibility(enabled ? View.GONE : View.VISIBLE);
+    }
+    // Ensure overlay UI is visible when minimal mode is on
+    if (enabled) {
+      if (gazeOverlay != null) gazeOverlay.setVisibility(View.VISIBLE);
+      if (gazeStatusText != null) gazeStatusText.setVisibility(View.VISIBLE);
     }
   }
   
@@ -641,6 +699,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       return rgbFrameBitmap;
     }
     
+    final boolean minimalMode = minimalModeEnabled;
+    
     // Check if required networks are initialized (using QNN now)
     boolean hasFaceDetection = (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) || 
                                (face_detection_qnn != null && face_detection_qnn.isReady());
@@ -730,7 +790,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       inferStartTime = SystemClock.uptimeMillis();
       boxes = tfliteFaceDetector.detectFaces(processedBitmap);
       inferencetime += SystemClock.uptimeMillis() - inferStartTime;
-      Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
+      if (!minimalMode) {
+        Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
+      }
     } else {
       // Fallback to QNN face detection (DLC model)
       DetectionUtils.scaleResult scale_result = scale(croppedBitmap, DemoConfig.face_detection_input_W, DemoConfig.face_detection_input_H);
@@ -748,7 +810,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       inferencetime += SystemClock.uptimeMillis() - inferStartTime;
 
       if (NNoutput != null) {
-        Log.d("QNN", "Face detection output size: " + NNoutput.length);
+        if (!minimalMode) {
+          Log.d("QNN", "Face detection output size: " + NNoutput.length);
+        }
         boxes = postprocessing(NNoutput, ratioX, ratioY);
       } else {
         Log.e("QNN", "Face detection inference failed");
@@ -774,7 +838,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Update face detection status based on TFLite/QNN output
     if (boxes != null && boxes.length != 0) {
       hasFaceDetected = true;  // Face detected by TFLite/QNN
-      Log.d("BOXES_SIZE", String.valueOf(boxes.length));
+      if (!minimalMode) {
+        Log.d("BOXES_SIZE", String.valueOf(boxes.length));
+      }
     } else {
       hasFaceDetected = false;  // No face detected
       hasGazeData = false;      // No gaze data if no face
@@ -802,7 +868,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         float[] box = boxes[b];
         
         // Create high-resolution face crop with padding for the first face
-        if (b == 0) {
+        if (!minimalMode && b == 0) {
           float padding = displayConfig.faceCropPadding;
           int displaySize = displayConfig.faceCropDisplaySize;
           currentFaceCrop = extractFaceCrop(processedBitmap, box, padding, displaySize);
@@ -832,7 +898,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         inferencetime += SystemClock.uptimeMillis() - inferStartTime;
         
         if (NNoutput != null) {
-            Log.d("QNN", "Landmark detection output size: " + NNoutput.length);
+            if (!minimalMode) {
+              Log.d("QNN", "Landmark detection output size: " + NNoutput.length);
+            }
             float[] landmark = landmark_postprocess(landmark_preprocess_result, NNoutput);
 
             double[] landmark_post = new double[landmark.length];
@@ -888,7 +956,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
-                    Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
+                    if (!minimalMode) {
+                      Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
+                    }
                     // IMPORTANT:
                     // The v2 model was trained on the SAME raw features we record (see recordFrame()):
                     // - gaze_pitch/yaw from gaze_postprocess (radians)
@@ -898,9 +968,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                     // So we must feed the classifier the *exact same* raw values without any extra remapping.
                     isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
                     lookingProbability = lookingClassifier.getLastProbability();
-                    Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+                    if (!minimalMode) {
+                      Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+                    }
                   } else {
-                    Log.w("LookingClassifier", "Classifier not available: null=" + (lookingClassifier == null));
+                    if (!minimalMode) {
+                      Log.w("LookingClassifier", "Classifier not available: null=" + (lookingClassifier == null));
+                    }
                   }
                   
                   // Record frame if recording is active (now includes head pose)
@@ -914,19 +988,21 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         }
       }
       // landamrk detection end
-      for (int i=0;i<gazes.size();i++) {
-        drawgaze(img, gazes.elementAt(i), landmarks.elementAt(i));
-        drawheadpose(img, rvecs.elementAt(i), tvecs.elementAt(i), camera_matrix);
-      }
-      Utils.matToBitmap(img, processedBitmap);
-      processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
-      drawbox(pixs, boxes, DemoConfig.crop_H, DemoConfig.crop_W);
-      for (float[] landmark : landmarks) {
-        drawlandmark(pixs, landmark, DemoConfig.crop_H, DemoConfig.crop_W);
+      if (!minimalMode) {
+        for (int i=0;i<gazes.size();i++) {
+          drawgaze(img, gazes.elementAt(i), landmarks.elementAt(i));
+          drawheadpose(img, rvecs.elementAt(i), tvecs.elementAt(i), camera_matrix);
+        }
+        Utils.matToBitmap(img, processedBitmap);
+        processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+        drawbox(pixs, boxes, DemoConfig.crop_H, DemoConfig.crop_W);
+        for (float[] landmark : landmarks) {
+          drawlandmark(pixs, landmark, DemoConfig.crop_H, DemoConfig.crop_W);
+        }
       }
       
       // Draw on face crop for display (landmarks relative to face crop)
-      if (currentFaceCrop != null && faceCropMat != null && gazes.size() > 0) {
+      if (!minimalMode && currentFaceCrop != null && faceCropMat != null && gazes.size() > 0) {
         // Draw gaze and landmarks on face crop
         // We need to transform landmark coordinates to face crop space
         float[] box = boxes[0];
@@ -953,17 +1029,21 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         faceCropBitmap = currentFaceCrop;
       }
     } else {
-      processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+      if (!minimalMode) {
+        processedBitmap.getPixels(pixs,0, DemoConfig.crop_W, 0, 0,DemoConfig.crop_W, DemoConfig.crop_H);
+      }
       faceCropBitmap = null;  // No face detected
     }
 
     //transpose
-    if(!DemoConfig.USE_VERTICAL) {
-      transpose(pixs, pixs_out, DemoConfig.crop_H, DemoConfig.crop_W);
-      detection.setPixels(pixs_out, 0, DemoConfig.crop_H, 0, 0, DemoConfig.crop_H, DemoConfig.crop_W);
-    }
-    else{
-      detection.setPixels(pixs, 0, DemoConfig.crop_H, 0, 0, DemoConfig.crop_H, DemoConfig.crop_W);
+    if (!minimalMode) {
+      if(!DemoConfig.USE_VERTICAL) {
+        transpose(pixs, pixs_out, DemoConfig.crop_H, DemoConfig.crop_W);
+        detection.setPixels(pixs_out, 0, DemoConfig.crop_H, 0, 0, DemoConfig.crop_H, DemoConfig.crop_W);
+      }
+      else{
+        detection.setPixels(pixs, 0, DemoConfig.crop_H, 0, 0, DemoConfig.crop_H, DemoConfig.crop_W);
+      }
     }
     lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
     latency=lastProcessingTimeMs;
@@ -999,21 +1079,25 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                         new Runnable() {
                           @Override
                           public void run() {
-                            // Region preview (left half)
-                            ImageView imageView = (ImageView) findViewById(R.id.imageView2);
-                            imageView.setRotation(detectionRotation);
-                            imageView.setScaleX(detectionScaleX);
-                            imageView.setScaleY(detectionScaleY);
-                            imageView.setImageBitmap(detection);
-                            
-                            // Face crop preview
-                            ImageView faceView = (ImageView) findViewById(R.id.faceImageView);
-                            if (faceView != null) {
-                              if (faceCropToDisplay != null) {
-                                faceView.setImageBitmap(faceCropToDisplay);
-                              } else {
-                                // No face detected - show placeholder or clear
-                                faceView.setImageBitmap(null);
+                            if (!minimalModeEnabled) {
+                              // Region preview (left half)
+                              ImageView imageView = (ImageView) findViewById(R.id.imageView2);
+                              if (imageView != null) {
+                                imageView.setRotation(detectionRotation);
+                                imageView.setScaleX(detectionScaleX);
+                                imageView.setScaleY(detectionScaleY);
+                                imageView.setImageBitmap(detection);
+                              }
+                              
+                              // Face crop preview
+                              ImageView faceView = (ImageView) findViewById(R.id.faceImageView);
+                              if (faceView != null) {
+                                if (faceCropToDisplay != null) {
+                                  faceView.setImageBitmap(faceCropToDisplay);
+                                } else {
+                                  // No face detected - show placeholder or clear
+                                  faceView.setImageBitmap(null);
+                                }
                               }
                             }
                           }
@@ -1138,11 +1222,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                       boolean useMLClassifier = lookingClassifier != null && lookingClassifier.isInitialized();
                       
                       // DEBUG: Log ML classifier status
-                      Log.d("GazeUI", "useMLClassifier=" + useMLClassifier + 
-                          ", calibrated=" + calibrated + 
-                          ", displayGaze=" + displayGaze +
-                          ", lookingAtCam=" + lookingAtCam +
-                          ", prob=" + lookingProbability);
+                      if (!minimalModeEnabled) {
+                        Log.d("GazeUI", "useMLClassifier=" + useMLClassifier + 
+                            ", calibrated=" + calibrated + 
+                            ", displayGaze=" + displayGaze +
+                            ", lookingAtCam=" + lookingAtCam +
+                            ", prob=" + lookingProbability);
+                      }
                       
                       if (gazeOverlay != null && gazeStatusText != null) {
                         // Always show overlay when ML classifier is active OR when calibrated
@@ -1171,7 +1257,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                             }
 
                             // Logcat (per processed frame)
-                            Log.d("LookingProb", pctText + " (looking=" + lookingAtCam + ")");
+                            if (!minimalModeEnabled) {
+                              Log.d("LookingProb", pctText + " (looking=" + lookingAtCam + ")");
+                            }
                           } else {
                             // No gaze yet (or no face) - yellow overlay
                             gazeOverlay.setBackgroundColor(0x60FFFF00);  // Semi-transparent yellow
@@ -1189,7 +1277,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                             }
 
                             // Logcat (per processed frame)
-                            Log.d("LookingProb", statusText + " (hasFace=" + hasFaceDetected + ")");
+                            if (!minimalModeEnabled) {
+                              Log.d("LookingProb", statusText + " (hasFace=" + hasFaceDetected + ")");
+                            }
                           }
                           // ALWAYS set visibility when ML or calibrated
                           gazeOverlay.setVisibility(View.VISIBLE);

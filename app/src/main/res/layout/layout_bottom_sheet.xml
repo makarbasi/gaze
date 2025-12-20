@@ -38,6 +38,7 @@
 
             <!-- Left side: Region preview (left half of camera) -->
             <FrameLayout
+                android:id="@+id/region_preview_container"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1">
@@ -51,6 +52,7 @@
                     tools:srcCompat="@tools:sample/avatars" />
 
                 <TextView
+                    android:id="@+id/region_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom|start"
@@ -64,6 +66,7 @@
 
             <!-- Right side: Face crop (300x300) -->
             <FrameLayout
+                android:id="@+id/face_preview_container"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1">
@@ -102,6 +105,7 @@
                     android:visibility="gone" />
 
                 <TextView
+                    android:id="@+id/face_label"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="bottom|start"
@@ -114,6 +118,16 @@
             </FrameLayout>
 
         </LinearLayout>
+
+        <!-- Minimal overlay mode (no previews / no drawings; keep only green/red overlay) -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switch_minimal_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Minimal overlay mode"
+            android:textColor="@android:color/black"
+            android:textSize="12sp" />
 
         <!-- Recording controls - below the split view -->
         <LinearLayout

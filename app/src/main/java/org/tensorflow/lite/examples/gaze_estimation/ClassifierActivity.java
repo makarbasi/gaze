@@ -113,6 +113,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private LookingClassifier lookingClassifier = null;
   private volatile boolean isLookingAtCamera = false;
   private volatile float lookingProbability = 0f;
+
+  // Latest head pose (pitch/yaw/roll) for UI (radians). Updated from gaze_preprocess_result.rvec.
+  private volatile float latestHeadPitch = 0f;
+  private volatile float latestHeadYaw = 0f;
+  private volatile float latestHeadRoll = 0f;
+  private volatile boolean hasHeadPose = false;
   
   // Minimal overlay mode (UI)
   private volatile boolean minimalModeEnabled = false;
@@ -126,6 +132,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private ImageView faceImageView;
   private View regionLabel;
   private View faceLabel;
+  private TextView headPosePitchText;
+  private TextView headPoseYawText;
+  private TextView headPoseRollText;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -141,6 +150,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     gazeStatusText = findViewById(R.id.gaze_status_text);
     calibrateButton = findViewById(R.id.calibrate_button);
     lookingProbText = findViewById(R.id.looking_prob_text);
+    headPosePitchText = findViewById(R.id.head_pose_pitch);
+    headPoseYawText = findViewById(R.id.head_pose_yaw);
+    headPoseRollText = findViewById(R.id.head_pose_roll);
     
     // Minimal overlay mode UI elements
     minimalModeSwitch = findViewById(R.id.switch_minimal_mode);
@@ -855,6 +867,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     } else {
       hasFaceDetected = false;  // No face detected
       hasGazeData = false;      // No gaze data if no face
+      hasHeadPose = false;      // No head pose if no face
     }
     
     // landmark detection start
@@ -964,6 +977,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   latestGazePitch = gaze_pitchyaw[0];
                   latestGazeYaw = gaze_pitchyaw[1];
                   hasGazeData = true;
+
+                  // Store latest head pose for display (use first detected face)
+                  float[] headPose = extractHeadPose(gaze_preprocess_result.rvec);
+                  latestHeadPitch = headPose[0];
+                  latestHeadYaw = headPose[1];
+                  latestHeadRoll = headPose[2];
+                  hasHeadPose = true;
                   
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
@@ -1227,6 +1247,19 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                         showGazePitchYaw(displayPitch, displayYaw);
                       } else {
                         clearGazePitchYaw();
+                      }
+
+                      // Display head pose (pitch/yaw/roll)
+                      if (headPosePitchText != null && headPoseYawText != null && headPoseRollText != null) {
+                        if (hasHeadPose) {
+                          headPosePitchText.setText(String.format("Head P: %.1f°", Math.toDegrees(latestHeadPitch)));
+                          headPoseYawText.setText(String.format("Head Y: %.1f°", Math.toDegrees(latestHeadYaw)));
+                          headPoseRollText.setText(String.format("Head R: %.1f°", Math.toDegrees(latestHeadRoll)));
+                        } else {
+                          headPosePitchText.setText("Head P: --");
+                          headPoseYawText.setText("Head Y: --");
+                          headPoseRollText.setText("Head R: --");
+                        }
                       }
                       
                       // Update gaze overlay - ML classifier takes priority

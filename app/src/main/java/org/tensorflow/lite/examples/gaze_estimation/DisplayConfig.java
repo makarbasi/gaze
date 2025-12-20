@@ -107,6 +107,9 @@ public class DisplayConfig {
     // Frames are automatically skipped when AI is still processing (no forced skipping)
     // Use min_frame_interval_ms to add extra throttling if needed
     public int minFrameIntervalMs = 0;           // Minimum milliseconds between processed frames (0=no limit, 100=max 10fps, 200=max 5fps)
+
+    // Debug logging (disable to keep Logcat clean during normal usage)
+    public boolean debugLogs = false;
     
     // Singleton instance
     private static DisplayConfig instance = null;
@@ -219,6 +222,9 @@ public class DisplayConfig {
             
             // Frame processing settings
             minFrameIntervalMs = json.optInt("min_frame_interval_ms", minFrameIntervalMs);
+
+            // Debug logging
+            debugLogs = json.optBoolean("debug_logs", debugLogs);
             
             Log.i(TAG, "════════════════════════════════════════");
             Log.i(TAG, "✓ Display config loaded from " + CONFIG_PATH);
@@ -260,6 +266,7 @@ public class DisplayConfig {
             Log.i(TAG, "  display_smoothing_alpha: " + displaySmoothingAlpha + " (lower=smoother)");
             Log.i(TAG, "  --- Frame Processing ---");
             Log.i(TAG, "  min_frame_interval_ms: " + minFrameIntervalMs + "ms (0=no limit, frames auto-skipped during processing)");
+            Log.i(TAG, "  debug_logs: " + debugLogs);
             Log.i(TAG, "════════════════════════════════════════");
             
             return true;
@@ -314,7 +321,8 @@ public class DisplayConfig {
             writer.println("  \"face_beta\": " + faceBeta + ",");
             writer.println("  \"display_smoothing_alpha\": " + displaySmoothingAlpha + ",");
             writer.println("");
-            writer.println("  \"min_frame_interval_ms\": " + minFrameIntervalMs);
+            writer.println("  \"min_frame_interval_ms\": " + minFrameIntervalMs + ",");
+            writer.println("  \"debug_logs\": " + debugLogs);
             writer.println("}");
             
             lastModified = configFile.lastModified();

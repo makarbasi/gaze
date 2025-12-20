@@ -1008,7 +1008,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                   // Run Looking Classifier to determine if user is looking at camera
                   if (lookingClassifier != null && lookingClassifier.isInitialized()) {
                     if (!minimalMode) {
-                      Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
+                      if (DisplayConfig.getInstance().debugLogs) {
+                        Log.d("LookingClassifier", "Calling predict with gaze: " + gaze_pitchyaw[0] + ", " + gaze_pitchyaw[1]);
+                      }
                     }
                     // IMPORTANT:
                     // The v2 model was trained on the SAME raw features we record (see recordFrame()):
@@ -1020,7 +1022,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                     isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
                     lookingProbability = lookingClassifier.getLastProbability();
                     if (!minimalMode) {
-                      Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+                      if (DisplayConfig.getInstance().debugLogs) {
+                        Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
+                      }
                     }
                   } else {
                     if (!minimalMode) {
@@ -1187,7 +1191,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 
                 // Log ML result (every ~1 second)
                 if (System.currentTimeMillis() % 1000 < 50) {
-                  Log.i("GazeML", String.format(
+                  if (DisplayConfig.getInstance().debugLogs) Log.i("GazeML", String.format(
                     "ML Classifier: Looking=%b, Probability=%.1f%%",
                     isLookingAtCamera, lookingProbability * 100));
                 }
@@ -1202,7 +1206,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 
                 // Log for debugging (every ~1 second)
                 if (System.currentTimeMillis() % 1000 < 50) {
-                  Log.i("GazeThreshold", String.format(
+                  if (DisplayConfig.getInstance().debugLogs) Log.i("GazeThreshold", String.format(
                     "Pitch: %.1f° (diff: %.1f°, thr: %.1f°) | Yaw: %.1f° (diff: %.1f°, thr: %.1f°) | PitchOnly: %s",
                     Math.toDegrees(smoothedPitch), Math.toDegrees(pitchDiff), Math.toDegrees(pitchThreshold),
                     Math.toDegrees(smoothedYaw), Math.toDegrees(yawDiff), Math.toDegrees(yawThreshold),
@@ -1287,11 +1291,13 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                       
                       // DEBUG: Log ML classifier status
                       if (!minimalModeEnabled) {
-                        Log.d("GazeUI", "useMLClassifier=" + useMLClassifier + 
-                            ", calibrated=" + calibrated + 
-                            ", displayGaze=" + displayGaze +
-                            ", lookingAtCam=" + lookingAtCam +
-                            ", prob=" + lookingProbability);
+                       if (DisplayConfig.getInstance().debugLogs) {
+                         Log.d("GazeUI", "useMLClassifier=" + useMLClassifier +
+                             ", calibrated=" + calibrated +
+                             ", displayGaze=" + displayGaze +
+                             ", lookingAtCam=" + lookingAtCam +
+                             ", prob=" + lookingProbability);
+                       }
                       }
                       
                       if (gazeOverlay != null && gazeStatusText != null) {
@@ -1331,7 +1337,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
                             // Logcat (per processed frame)
                             if (!minimalModeEnabled) {
-                              Log.d("LookingProb", pctText + " (looking=" + lookingAtCam + ")");
+                              if (DisplayConfig.getInstance().debugLogs) {
+                                Log.d("LookingProb", pctText + " (looking=" + lookingAtCam + ")");
+                              }
                             }
                           } else {
                             // No gaze yet (or no face) - yellow overlay
@@ -1360,7 +1368,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
                             // Logcat (per processed frame)
                             if (!minimalModeEnabled) {
+                            if (DisplayConfig.getInstance().debugLogs) {
                               Log.d("LookingProb", statusText + " (hasFace=" + hasFaceDetected + ")");
+                            }
                             }
                           }
                           // ALWAYS set visibility when ML or calibrated

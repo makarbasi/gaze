@@ -297,9 +297,11 @@ public class LookingClassifier {
             lastProbability = outputArray[0][0];
             lastIsLooking = lastProbability > THRESHOLD;
             
-            // Log every prediction for debugging
-            Log.d(TAG, String.format("ML: prob=%.2f%%, looking=%b (gaze: p=%.2f, y=%.2f)", 
-                lastProbability * 100, lastIsLooking, gaze_pitch, gaze_yaw));
+            // Per-frame logging is noisy; only log when explicitly enabled via display_config.json
+            if (DisplayConfig.getInstance().debugLogs) {
+                Log.d(TAG, String.format("ML: prob=%.2f%%, looking=%b (gaze: p=%.2f, y=%.2f)",
+                    lastProbability * 100, lastIsLooking, gaze_pitch, gaze_yaw));
+            }
             
             return lastIsLooking;
             

@@ -78,7 +78,9 @@ public class GazeEstimationUtils {
         MatOfPoint2f imagePoints = new MatOfPoint2f(landmarks_mat);
         MatOfDouble distCoeffs = new MatOfDouble();
         distCoeffs.fromArray(0,0,0,0,0);
-        Log.d("DEBUG_SOLVEPNP", face_model.size().toString()+" "+imagePoints.size().toString()+" "+camera_matrix.size().toString()+" "+distCoeffs.size().toString());
+        if (DisplayConfig.getInstance().debugLogs) {
+            Log.d("DEBUG_SOLVEPNP", face_model.size().toString()+" "+imagePoints.size().toString()+" "+camera_matrix.size().toString()+" "+distCoeffs.size().toString());
+        }
         Calib3d.solvePnP(face_model, imagePoints, camera_matrix, distCoeffs, rvec, tvec);
     }
 
@@ -88,21 +90,26 @@ public class GazeEstimationUtils {
     private static int[] roiSize_eye = {60, 60};
     private static int[] roiSize_face = {120, 120};
     public static List normalizeDataForInference(Mat img_u, Mat hr, Mat ht, Mat camera_matrix) {
+        final boolean debugLogs = DisplayConfig.getInstance().debugLogs;
         Mat hR = new Mat();
         Calib3d.Rodrigues(hr, hR);
         Mat Fc = hR.clone();
         Mat face_model_t = face_model.reshape(1, new int[]{14, 3});
         face_model_t = face_model_t.t();
         face_model_t.convertTo(face_model_t, CV_64FC1);
-        Log.d("DEBUG_TYPE", face_model_t.type() + " " + Fc.type());
-        Log.d("DEBUG_SIZE", face_model_t.size() + " " + Fc.size());
+        if (debugLogs) {
+            Log.d("DEBUG_TYPE", face_model_t.type() + " " + Fc.type());
+            Log.d("DEBUG_SIZE", face_model_t.size() + " " + Fc.size());
+        }
         Fc = Fc.matMul(face_model_t);
         List<Mat> htx14 = new ArrayList();
         for (int i=0;i<14;i++)
             htx14.add(ht);
         Mat hts = new Mat();
         Core.hconcat(htx14, hts);
-        Log.d("DEBUG_SIZE", Fc.size() + " " + ht.size() + " " + hts.size());
+        if (debugLogs) {
+            Log.d("DEBUG_SIZE", Fc.size() + " " + ht.size() + " " + hts.size());
+        }
         Core.add(Fc, hts, Fc);
 
 
@@ -176,7 +183,9 @@ public class GazeEstimationUtils {
             data.add(img_warped);
             if (distance_norm == distance_norm_face) {
                 data.add(R);
-                Log.d("GAZE_POST_DEBUG", R.get(0,0)[0] + " " + R.get(0,1)[0] + " " + R.get(0, 2)[0] + "\n" + R.get(1,0)[0] + " " + R.get(1,1)[0] + " " + R.get(1, 2)[0]);
+                if (debugLogs) {
+                    Log.d("GAZE_POST_DEBUG", R.get(0,0)[0] + " " + R.get(0,1)[0] + " " + R.get(0, 2)[0] + "\n" + R.get(1,0)[0] + " " + R.get(1,1)[0] + " " + R.get(1, 2)[0]);
+                }
             }
         }
         return data;

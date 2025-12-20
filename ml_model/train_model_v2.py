@@ -39,20 +39,19 @@ OUTPUT_KERAS = "looking_classifier_v2.h5"
 
 # Feature selection
 USE_LANDMARKS = True  # Include important landmark features
-# Important landmarks for gaze detection:
-# 60-67: Left eye landmarks
-# 68-75: Right eye landmarks  
-# 52-59: Eyebrow landmarks
-# 96-97: Pupil/iris centers (if available)
+# Selected landmarks for looking classifier v2:
+# - Eyes: left/right corners + top/bottom (gives robust eye shape/pose)
+# - Nose: tip + left/right corners
+#
+# Note: "eye center" is added as a DERIVED feature (computed from the two eye corners),
+# so it doesn't require a specific landmark index.
 LANDMARK_INDICES = [
-    # Left eye (8 points)
-    60, 61, 62, 63, 64, 65, 66, 67,
-    # Right eye (8 points)
-    68, 69, 70, 71, 72, 73, 74, 75,
-    # Nose tip (reference point)
-    54,
-    # Inner eye corners (important for gaze direction)
-    60, 64, 68, 72
+    # Left eye: corners + top/bottom
+    60, 64, 62, 66,
+    # Right eye: corners + top/bottom
+    68, 72, 70, 74,
+    # Nose: tip + left/right corners
+    54, 55, 59,
 ]
 # Remove duplicates (keep deterministic order for reproducibility)
 LANDMARK_INDICES = sorted(set(LANDMARK_INDICES))

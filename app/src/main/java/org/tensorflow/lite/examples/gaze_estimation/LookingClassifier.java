@@ -94,7 +94,13 @@ public class LookingClassifier {
      * A small parsed representation of each feature to fill at runtime.
      */
     private static final class FeatureSpec {
-        enum Kind { GAZE_PITCH, GAZE_YAW, HEAD_PITCH, HEAD_YAW, HEAD_ROLL, REL_PITCH, REL_YAW, LANDMARK_X, LANDMARK_Y, UNKNOWN }
+        enum Kind {
+            GAZE_PITCH, GAZE_YAW,
+            HEAD_PITCH, HEAD_YAW, HEAD_ROLL,
+            REL_PITCH, REL_YAW,
+            LANDMARK_X, LANDMARK_Y,
+            UNKNOWN
+        }
         final Kind kind;
         final int landmarkIndex; // only for LANDMARK_X / LANDMARK_Y
         FeatureSpec(Kind kind, int landmarkIndex) {

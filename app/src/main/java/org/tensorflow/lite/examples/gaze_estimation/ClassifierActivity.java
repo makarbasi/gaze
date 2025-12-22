@@ -746,6 +746,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Check if OpenCV is ready before using Mat operations
     if (!isOpenCVReady) {
       Log.e("OpenCV", "OpenCV not initialized, skipping frame processing");
+      // IMPORTANT: release the current camera frame, otherwise ImageReader stalls and UI never updates.
+      readyForNextImage();
       return rgbFrameBitmap;
     }
     
@@ -774,6 +776,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           Log.i("Init", "Waiting for models to initialize...");
         }
       }
+      // IMPORTANT: release the current camera frame, otherwise processing stops permanently.
+      readyForNextImage();
       return rgbFrameBitmap;
     }
     
@@ -785,6 +789,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     
     if (!hasFaceDetection || !hasLandmark || !hasGaze) {
       Log.e("QNN", "Networks not initialized, skipping frame processing");
+      // IMPORTANT: release the current camera frame, otherwise ImageReader stalls and UI never updates.
+      readyForNextImage();
       return rgbFrameBitmap;
     }
 

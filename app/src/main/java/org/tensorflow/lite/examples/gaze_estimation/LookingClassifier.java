@@ -9,6 +9,8 @@ import org.json.JSONObject;
 import org.opencv.core.Mat;
 import org.opencv.calib3d.Calib3d;
 import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.gpu.GpuDelegate;
+import org.tensorflow.lite.nnapi.NnApiDelegate;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -39,6 +41,9 @@ public class LookingClassifier {
     private static final float THRESHOLD = 0.5f;
     
     private Interpreter interpreter;
+    private GpuDelegate gpuDelegate;
+    private NnApiDelegate nnApiDelegate;
+    private String acceleratorType = "CPU";
     private boolean isInitialized = false;
     private String lastInitError = null;
     
@@ -56,6 +61,10 @@ public class LookingClassifier {
     private boolean lastIsLooking = false;
     
     public LookingClassifier() {}
+
+    public String getAcceleratorType() {
+        return acceleratorType;
+    }
     
     /**
      * Initialize the classifier by loading the TFLite model and metadata
@@ -74,12 +83,66 @@ public class LookingClassifier {
             
             // Load TFLite model
             MappedByteBuffer modelBuffer = loadModelFile(context);
-            Interpreter.Options options = new Interpreter.Options();
-            options.setNumThreads(2);
-            interpreter = new Interpreter(modelBuffer, options);
+
+            // Prefer GPU delegate, then NNAPI, then CPU.
+            interpreter = null;
+            acceleratorType = "CPU";
+
+            // --- Try GPU delegate ---
+            try {
+                Interpreter.Options options = new Interpreter.Options();
+                // GPU delegate ignores numThreads for most ops, but harmless.
+                options.setNumThreads(2);
+                gpuDelegate = new GpuDelegate();
+                options.addDelegate(gpuDelegate);
+                interpreter = new Interpreter(modelBuffer, options);
+                acceleratorType = "GPU (TFLite GPU delegate)";
+                Log.i(TAG, "✓ Looking classifier using GPU delegate");
+            } catch (Throwable gpuErr) {
+                // GPU delegate might not be supported on this device / driver / model.
+                Log.w(TAG, "GPU delegate unavailable for looking classifier, falling back: " + gpuErr.getMessage());
+                try {
+                    if (gpuDelegate != null) gpuDelegate.close();
+                } catch (Throwable ignored) {}
+                gpuDelegate = null;
+                interpreter = null;
+            }
+
+            // --- Try NNAPI delegate ---
+            if (interpreter == null) {
+                try {
+                    Interpreter.Options options = new Interpreter.Options();
+                    options.setNumThreads(2);
+                    NnApiDelegate.Options nnOptions = new NnApiDelegate.Options();
+                    nnOptions.setAllowFp16(true);
+                    // Keep CPU fallback allowed to avoid hard failures on devices with partial NNAPI support.
+                    nnApiDelegate = new NnApiDelegate(nnOptions);
+                    options.addDelegate(nnApiDelegate);
+                    interpreter = new Interpreter(modelBuffer, options);
+                    acceleratorType = "NNAPI";
+                    Log.i(TAG, "✓ Looking classifier using NNAPI delegate");
+                } catch (Throwable nnErr) {
+                    Log.w(TAG, "NNAPI delegate unavailable for looking classifier, using CPU: " + nnErr.getMessage());
+                    try {
+                        if (nnApiDelegate != null) nnApiDelegate.close();
+                    } catch (Throwable ignored) {}
+                    nnApiDelegate = null;
+                    interpreter = null;
+                }
+            }
+
+            // --- CPU fallback ---
+            if (interpreter == null) {
+                Interpreter.Options options = new Interpreter.Options();
+                options.setNumThreads(2);
+                interpreter = new Interpreter(modelBuffer, options);
+                acceleratorType = "CPU";
+                Log.i(TAG, "✓ Looking classifier using CPU");
+            }
+
             isInitialized = true;
             lastInitError = null;
-            Log.i(TAG, "✓ Looking classifier initialized with " + numFeatures + " features");
+            Log.i(TAG, "✓ Looking classifier initialized with " + numFeatures + " features (" + acceleratorType + ")");
             return true;
         } catch (Exception e) {
             lastInitError = e.getClass().getSimpleName() + ": " + e.getMessage();
@@ -420,6 +483,14 @@ public class LookingClassifier {
             interpreter.close();
             interpreter = null;
         }
+        try {
+            if (gpuDelegate != null) gpuDelegate.close();
+        } catch (Throwable ignored) {}
+        gpuDelegate = null;
+        try {
+            if (nnApiDelegate != null) nnApiDelegate.close();
+        } catch (Throwable ignored) {}
+        nnApiDelegate = null;
         isInitialized = false;
     }
 }

@@ -317,6 +317,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       if (gazeOverlay != null) gazeOverlay.setVisibility(View.VISIBLE);
       if (gazeStatusText != null) gazeStatusText.setVisibility(View.VISIBLE);
     }
+
+    // Mute verbose logging globally while Minimal overlay mode is enabled.
+    // This suppresses spammy per-frame logs from Java + native (QNN) code paths.
+    DisplayConfig cfg = DisplayConfig.getInstance();
+    cfg.setRuntimeLogMute(enabled);
+    QNNModelRunner.setVerboseLoggingEnabled(cfg.shouldVerboseLog());
   }
   
   /**
@@ -901,7 +907,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         tFaceDetMs = SystemClock.uptimeMillis() - inferStartTime;
       }
       if (!minimalMode) {
-        Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+          Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
+        }
       }
     } else {
       // Fallback to QNN face detection (DLC model)
@@ -953,7 +961,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     if (boxes != null && boxes.length != 0) {
       hasFaceDetected = true;  // Face detected by TFLite/QNN
       if (!minimalMode) {
-        Log.d("BOXES_SIZE", String.valueOf(boxes.length));
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+          Log.d("BOXES_SIZE", String.valueOf(boxes.length));
+        }
       }
     } else {
       hasFaceDetected = false;  // No face detected
@@ -1021,7 +1031,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         
         if (NNoutput != null) {
             if (!minimalMode) {
-              Log.d("QNN", "Landmark detection output size: " + NNoutput.length);
+              if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                Log.d("QNN", "Landmark detection output size: " + NNoutput.length);
+              }
             }
             float[] landmark = landmark_postprocess(landmark_preprocess_result, NNoutput);
 
@@ -1231,11 +1243,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                 // Capture face crop for display
                 final Bitmap faceCropToDisplay = faceCropBitmap;
                 
-                // Log every 30 frames to avoid spam
-                if (System.currentTimeMillis() % 1000 < 50) {
-                    Log.i("DisplayConfig", "APPLYING detection: rotation=" + detectionRotation + 
-                        ", scaleX=" + detectionScaleX + ", scaleY=" + detectionScaleY +
-                        ", faceCrop=" + (faceCropToDisplay != null ? "yes" : "no"));
+                // Log every ~1s to avoid spam (only when verbose logging is enabled).
+                if (DisplayConfig.getInstance().shouldVerboseLog() && System.currentTimeMillis() % 1000 < 50) {
+                  Log.i("DisplayConfig", "APPLYING detection: rotation=" + detectionRotation +
+                      ", scaleX=" + detectionScaleX + ", scaleY=" + detectionScaleY +
+                      ", faceCrop=" + (faceCropToDisplay != null ? "yes" : "no"));
                 }
                 
                 runOnUiThread(

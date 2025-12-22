@@ -35,10 +35,14 @@
 #include "QNN/System/QnnSystemDlc.h"
 
 #define LOG_TAG "QNNModelRunner"
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
+// Verbose logging toggle (controls LOGD/LOGI/LOGW; LOGE always prints).
+static bool g_verbose_logs = false;
+
+#define LOGI(...) do { if (g_verbose_logs) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); } while (0)
+#define LOGW(...) do { if (g_verbose_logs) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__); } while (0)
+#define LOGD(...) do { if (g_verbose_logs) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while (0)
 
 // QNN Backend types
 enum class QnnBackendType {
@@ -206,6 +210,18 @@ static void cleanupContext(QnnModelContext* ctx) {
 }
 
 extern "C" {
+
+/*
+ * Enable/disable verbose logging (LOGD/LOGI/LOGW) from native QNN runner.
+ * Used to mute per-frame log spam in Minimal overlay mode.
+ */
+JNIEXPORT void JNICALL
+Java_org_tensorflow_lite_examples_gaze_1estimation_QNNModelRunner_nativeSetVerboseLoggingEnabled(
+        JNIEnv* /*env*/,
+        jclass /*clazz*/,
+        jboolean enabled) {
+    g_verbose_logs = (enabled == JNI_TRUE);
+}
 
 /*
  * Check if QNN is available on this device

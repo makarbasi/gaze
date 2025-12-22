@@ -110,6 +110,25 @@ public class DisplayConfig {
 
     // Debug logging (disable to keep Logcat clean during normal usage)
     public boolean debugLogs = false;
+
+    // Runtime log mute (used by Minimal overlay mode). When true, suppress verbose logs even if debugLogs=true.
+    public volatile boolean runtimeLogMute = false;
+
+    /**
+     * True if verbose/debug logging should be emitted right now.
+     * - Controlled by /data/local/tmp/display_config.json ("debugLogs")
+     * - Additionally muted at runtime by Minimal overlay mode.
+     */
+    public boolean shouldVerboseLog() {
+        return debugLogs && !runtimeLogMute;
+    }
+
+    /**
+     * Mute/unmute verbose logs at runtime (e.g., Minimal overlay mode).
+     */
+    public void setRuntimeLogMute(boolean mute) {
+        this.runtimeLogMute = mute;
+    }
     
     // Singleton instance
     private static DisplayConfig instance = null;
@@ -131,11 +150,15 @@ public class DisplayConfig {
         if (configFile.exists()) {
             long currentModified = configFile.lastModified();
             if (currentModified > lastModified) {
-                Log.i(TAG, "Config file modified (was: " + lastModified + ", now: " + currentModified + "), reloading...");
+                if (shouldVerboseLog()) {
+                    Log.i(TAG, "Config file modified (was: " + lastModified + ", now: " + currentModified + "), reloading...");
+                }
                 load();
             }
         } else {
-            Log.w(TAG, "Config file does not exist at: " + CONFIG_PATH);
+            if (shouldVerboseLog()) {
+                Log.w(TAG, "Config file does not exist at: " + CONFIG_PATH);
+            }
         }
     }
     

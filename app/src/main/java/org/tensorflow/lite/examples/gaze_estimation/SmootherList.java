@@ -38,9 +38,11 @@ public class SmootherList {
         this.landmarkBeta = config.landmarkBeta;
         this.gazeMinCutoff = config.gazeMinCutoff;
         this.gazeBeta = config.gazeBeta;
-        Log.d("SmootherList", "Updated smoothing params: face(cutoff=" + faceMinCutoff + ", beta=" + faceBeta + 
-              "), landmark(cutoff=" + landmarkMinCutoff + ", beta=" + landmarkBeta + 
-              "), gaze(cutoff=" + gazeMinCutoff + ", beta=" + gazeBeta + ")");
+        if (config.shouldVerboseLog()) {
+            Log.d("SmootherList", "Updated smoothing params: face(cutoff=" + faceMinCutoff + ", beta=" + faceBeta +
+                    "), landmark(cutoff=" + landmarkMinCutoff + ", beta=" + landmarkBeta +
+                    "), gaze(cutoff=" + gazeMinCutoff + ", beta=" + gazeBeta + ")");
+        }
     }
 
     public void addOne() {
@@ -85,7 +87,9 @@ public class SmootherList {
                 smoother.tick = 0;
                 face_paired[min_idx] = true;
                 faceId2smootherId[min_idx] = s_cnt;
-                Log.d("SMOOTH_DEBUG_MATCH", s_cnt+" is matched to "+min_idx+" with a diff of "+min_diff);
+                if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                    Log.d("SMOOTH_DEBUG_MATCH", s_cnt + " is matched to " + min_idx + " with a diff of " + min_diff);
+                }
             }
         }
         for (int i=0;i<faces.size();i++) {

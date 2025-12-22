@@ -262,7 +262,9 @@ public class TFLiteFaceDetector {
             outputs.put(2, outputArray2);
             interpreter.runForMultipleInputsOutputs(new Object[]{inputBuffer}, outputs);
             long inferenceTime = System.currentTimeMillis() - startTime;
-            Log.d(TAG, "Face detection inference: " + inferenceTime + "ms");
+            if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                Log.d(TAG, "Face detection inference: " + inferenceTime + "ms");
+            }
             
             // Identify which output is which based on channel count
             byte[][][][] heatmapOutput;
@@ -354,7 +356,9 @@ public class TFLiteFaceDetector {
             // Take top 10 candidates
             List<float[]> topCandidates = candidates.subList(0, Math.min(10, candidates.size()));
             
-            Log.i(TAG, "Found " + topCandidates.size() + " face candidates (threshold=" + faceDetectionThreshold + ")");
+            if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                Log.i(TAG, "Found " + topCandidates.size() + " face candidates (threshold=" + faceDetectionThreshold + ")");
+            }
             
             // Step 3: Decode bounding boxes
             List<float[]> rawBoxes = new ArrayList<>();  // [x1, y1, x2, y2, score]
@@ -410,12 +414,16 @@ public class TFLiteFaceDetector {
             // In single face mode, only return the best face (highest confidence)
             if (singleFaceMode && nmsResults.size() > 1) {
                 faces.add(nmsResults.get(0));  // Already sorted by score descending
-                Log.i(TAG, "Single face mode: returning best face (score=" + nmsResults.get(0)[4] + ") out of " + nmsResults.size());
+                if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                    Log.i(TAG, "Single face mode: returning best face (score=" + nmsResults.get(0)[4] + ") out of " + nmsResults.size());
+                }
             } else {
                 faces.addAll(nmsResults);
             }
-            
-            Log.i(TAG, "Detected " + faces.size() + " face(s) after NMS");
+
+            if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                Log.i(TAG, "Detected " + faces.size() + " face(s) after NMS");
+            }
             
         } catch (Exception e) {
             Log.e(TAG, "Error parsing face detection outputs: " + e.getMessage(), e);

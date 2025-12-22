@@ -29,6 +29,9 @@ import java.util.Map;
  */
 public class QNNModelRunner implements Closeable {
     private static final String TAG = "QNNModelRunner";
+
+    // Controls native (JNI) verbose logging (LOGD/LOGI/LOGW). Default off to avoid log spam.
+    private static volatile boolean verboseLoggingEnabled = false;
     
     // Backend types
     public enum Backend {
@@ -47,9 +50,24 @@ public class QNNModelRunner implements Closeable {
         try {
             System.loadLibrary("qnn_model_runner");
             Log.i(TAG, "✓ QNN Model Runner native library loaded");
+            // Keep native verbose logs OFF by default (can be enabled via DisplayConfig.debugLogs when needed).
+            try {
+                nativeSetVerboseLoggingEnabled(verboseLoggingEnabled);
+            } catch (Throwable ignored) {}
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Failed to load QNN Model Runner native library: " + e.getMessage());
         }
+    }
+
+    /**
+     * Enable/disable verbose native logging for QNN (LOGD/LOGI spam from JNI).
+     * Errors are still logged.
+     */
+    public static void setVerboseLoggingEnabled(boolean enabled) {
+        verboseLoggingEnabled = enabled;
+        try {
+            nativeSetVerboseLoggingEnabled(enabled);
+        } catch (Throwable ignored) {}
     }
     
     private long modelHandle = -1;
@@ -207,6 +225,8 @@ public class QNNModelRunner implements Closeable {
     // ========== Native Methods ==========
     
     private static native boolean nativeIsQnnAvailable();
+
+    private static native void nativeSetVerboseLoggingEnabled(boolean enabled);
     
     private native long nativeLoadModel(String modelPath, String outputLayerName, int backendType);
     

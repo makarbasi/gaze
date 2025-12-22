@@ -12,6 +12,7 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import org.tensorflow.lite.examples.gaze_estimation.DemoConfig;
+import org.tensorflow.lite.examples.gaze_estimation.DisplayConfig;
 import org.tensorflow.lite.examples.gaze_estimation.GazeEstimationUtils;
 
 import java.util.List;
@@ -63,7 +64,9 @@ public class ProcessFactory {
         y1 = Math.max(Math.min(y1, img.height()-1), 0);
         y2 = Math.max(Math.min(y2, img.height()-1), 0);
         Rect rectCrop = new Rect(x1, y1, (x2-x1+1), (y2-y1+1));
-        Log.d("DEBUG_CROP", String.valueOf(x1)+" "+String.valueOf(y1)+" "+String.valueOf(x2)+" "+String.valueOf(y2)+" "+img.size().toString());
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("DEBUG_CROP", String.valueOf(x1)+" "+String.valueOf(y1)+" "+String.valueOf(x2)+" "+String.valueOf(y2)+" "+img.size().toString());
+        }
         return img.submat(rectCrop);
     }
     public static LandmarkPreprocessResult landmark_preprocess(Mat img, float[] face) {
@@ -133,7 +136,9 @@ public class ProcessFactory {
         float[] reye_image = mat2array((Mat)data.get(1));
         float[] face_image = mat2array((Mat)data.get(2));
         Mat R = (Mat)data.get(3);
-        Log.d("GAZE_POST_DEBUG", R.get(0,0)[0] + " " + R.get(0,1)[0] + " " + R.get(0, 2)[0]);
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("GAZE_POST_DEBUG", R.get(0,0)[0] + " " + R.get(0,1)[0] + " " + R.get(0, 2)[0]);
+        }
 
         GazePreprocessResult result = new GazePreprocessResult();
         result.face = face_image;
@@ -159,9 +164,13 @@ public class ProcessFactory {
     }
     public static float[] gaze_postprocess(float[] pred_pitchyaw_aligned, Mat R) {
         pred_pitchyaw_aligned = deg2rad(pred_pitchyaw_aligned);
-        Log.d("GAZE_POST_DEBUG", pred_pitchyaw_aligned[0] + " " + pred_pitchyaw_aligned[1]);
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("GAZE_POST_DEBUG", pred_pitchyaw_aligned[0] + " " + pred_pitchyaw_aligned[1]);
+        }
         Mat pred_vec_aligned = GazeEstimationUtils.euler_to_vec(pred_pitchyaw_aligned[0], pred_pitchyaw_aligned[1]);
-        Log.d("GAZE_POST_DEBUG", pred_vec_aligned.get(0,0)[0] + " " + pred_vec_aligned.get(1,0)[0] + " " + pred_vec_aligned.get(2, 0)[0]);
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("GAZE_POST_DEBUG", pred_vec_aligned.get(0,0)[0] + " " + pred_vec_aligned.get(1,0)[0] + " " + pred_vec_aligned.get(2, 0)[0]);
+        }
         Mat pred_vec_cam = R.inv().matMul(pred_vec_aligned);
         Core.divide(pred_vec_cam, new Scalar(Core.norm(pred_vec_cam)), pred_vec_cam);
         return GazeEstimationUtils.vec_to_euler(pred_vec_cam);

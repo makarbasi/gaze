@@ -7,6 +7,7 @@ import android.os.Build;
 import android.util.Log;
 
 import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.gpu.GpuDelegate;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
 
 import java.io.IOException;
@@ -36,6 +37,7 @@ public class TFLiteFaceDetector {
     private static final String TAG = "TFLiteFaceDetector";
     
     private Interpreter interpreter;
+    private GpuDelegate gpuDelegate;
     private NnApiDelegate nnApiDelegate;
     private String acceleratorType = "CPU";
     
@@ -68,39 +70,75 @@ public class TFLiteFaceDetector {
         Log.i(TAG, "Loading Face Detection model...");
         MappedByteBuffer faceDetModelBuffer = AssetUtils.loadMappedFile(context, "face_detection.tflite");
         
-        Interpreter.Options options = new Interpreter.Options();
-        
-        // Try to use NNAPI delegate for GPU acceleration
         Log.i(TAG, "Device: " + Build.MANUFACTURER + " " + Build.MODEL);
         Log.i(TAG, "SOC: " + Build.HARDWARE);
-        Log.i(TAG, "Configuring NNAPI for GPU acceleration...");
-        
+
+        interpreter = null;
+        acceleratorType = "CPU";
+
+        // --- Try GPU delegate first ---
         try {
-            NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
-            nnApiOptions.setAllowFp16(true);
-            nnApiOptions.setUseNnapiCpu(false);  // NO CPU FALLBACK
-            
-            nnApiDelegate = new NnApiDelegate(nnApiOptions);
-            options.addDelegate(nnApiDelegate);
-            
-            // Identify device type
-            if (Build.HARDWARE.toLowerCase().contains("qcom") || 
-                Build.HARDWARE.toLowerCase().contains("qualcomm")) {
-                acceleratorType = "Qualcomm Snapdragon (NNAPI → Adreno GPU + Hexagon DSP)";
-            } else {
-                acceleratorType = "NNAPI (Hardware Accelerated)";
-            }
-            
-            Log.i(TAG, "✓ NNAPI delegate configured");
-            Log.i(TAG, "Accelerator: " + acceleratorType);
-        } catch (Exception e) {
-            Log.w(TAG, "NNAPI initialization failed, using CPU: " + e.getMessage());
-            acceleratorType = "CPU (NNAPI unavailable)";
+            Interpreter.Options options = new Interpreter.Options();
+            options.setNumThreads(2);
+            gpuDelegate = new GpuDelegate();
+            options.addDelegate(gpuDelegate);
+            interpreter = new Interpreter(faceDetModelBuffer, options);
+            acceleratorType = "GPU (TFLite GPU delegate)";
+            Log.i(TAG, "✓ Face detector using GPU delegate");
+        } catch (NoClassDefFoundError | UnsatisfiedLinkError e) {
+            // GPU delegate classes/.so not packaged or incompatible.
+            Log.w(TAG, "GPU delegate library not available for face detector: " + e.getMessage());
+            try { if (gpuDelegate != null) gpuDelegate.close(); } catch (Throwable ignored) {}
+            gpuDelegate = null;
+            interpreter = null;
+        } catch (Throwable gpuErr) {
+            Log.w(TAG, "GPU delegate unavailable for face detector, falling back: " + gpuErr.getMessage());
+            try { if (gpuDelegate != null) gpuDelegate.close(); } catch (Throwable ignored) {}
+            gpuDelegate = null;
+            interpreter = null;
         }
-        
-        options.setNumThreads(4);
-        
-        interpreter = new Interpreter(faceDetModelBuffer, options);
+
+        // --- Try NNAPI delegate ---
+        if (interpreter == null) {
+            Log.i(TAG, "Configuring NNAPI for acceleration...");
+            try {
+                Interpreter.Options options = new Interpreter.Options();
+                options.setNumThreads(2);
+
+                NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
+                nnApiOptions.setAllowFp16(true);
+                // Allow fallback so we don't crash on partial NNAPI support.
+                nnApiOptions.setUseNnapiCpu(true);
+
+                nnApiDelegate = new NnApiDelegate(nnApiOptions);
+                options.addDelegate(nnApiDelegate);
+                interpreter = new Interpreter(faceDetModelBuffer, options);
+
+                if (Build.HARDWARE != null &&
+                    (Build.HARDWARE.toLowerCase().contains("qcom") ||
+                     Build.HARDWARE.toLowerCase().contains("qualcomm"))) {
+                    acceleratorType = "NNAPI (Qualcomm)";
+                } else {
+                    acceleratorType = "NNAPI";
+                }
+                Log.i(TAG, "✓ Face detector using NNAPI delegate (" + acceleratorType + ")");
+            } catch (Throwable nnErr) {
+                Log.w(TAG, "NNAPI delegate unavailable for face detector, using CPU: " + nnErr.getMessage());
+                try { if (nnApiDelegate != null) nnApiDelegate.close(); } catch (Throwable ignored) {}
+                nnApiDelegate = null;
+                interpreter = null;
+            }
+        }
+
+        // --- CPU fallback ---
+        if (interpreter == null) {
+            Interpreter.Options options = new Interpreter.Options();
+            options.setNumThreads(4);
+            interpreter = new Interpreter(faceDetModelBuffer, options);
+            acceleratorType = "CPU";
+            Log.i(TAG, "✓ Face detector using CPU");
+        }
+
         isInitialized = true;
         
         Log.i(TAG, "════════════════════════════════════════");
@@ -419,6 +457,10 @@ public class TFLiteFaceDetector {
             interpreter.close();
             interpreter = null;
         }
+        try {
+            if (gpuDelegate != null) gpuDelegate.close();
+        } catch (Throwable ignored) {}
+        gpuDelegate = null;
         if (nnApiDelegate != null) {
             nnApiDelegate.close();
             nnApiDelegate = null;

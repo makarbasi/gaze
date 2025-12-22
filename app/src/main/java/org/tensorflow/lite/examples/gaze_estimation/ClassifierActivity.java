@@ -114,6 +114,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private volatile boolean isLookingAtCamera = false;
   private volatile float lookingProbability = 0f;
 
+  // Model initialization (to avoid blocking UI thread and causing ANRs during activity transitions)
+  private final Object modelInitLock = new Object();
+  private volatile boolean modelsInitStarted = false;
+  private volatile boolean modelsReady = false;
+
   // Latest head pose (pitch/yaw/roll) for UI (radians). Updated from gaze_preprocess_result.rvec.
   private volatile float latestHeadPitch = 0f;
   private volatile float latestHeadYaw = 0f;
@@ -581,95 +586,109 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     cropToFrameTransform = new Matrix();
     frameToCropTransform.invert(cropToFrameTransform);
 
-    // Initialize TFLite Face Detector (from HotGaze - more accurate model)
-    if (DemoConfig.USE_TFLITE_FACE_DETECTION) {
-      try {
-        tfliteFaceDetector = new TFLiteFaceDetector(this);
-        tfliteFaceDetector.initialize();
-        tfliteFaceDetector.setFaceDetectionThreshold(DemoConfig.tflite_face_detection_threshold);
-        tfliteFaceDetector.setMinFaceSize(DemoConfig.tflite_min_face_size);
-        tfliteFaceDetector.setNmsIouThreshold(DemoConfig.tflite_nms_iou_threshold);
-        Log.i("TFLiteFace", "✓ TFLite Face Detector initialized: " + tfliteFaceDetector.getAcceleratorType());
-      } catch (Exception e) {
-        Log.e("TFLiteFace", "TFLite Face Detector initialization failed, falling back to SNPE", e);
-        tfliteFaceDetector = null;
-        Toast.makeText(this, "TFLite face detection failed, using SNPE fallback", Toast.LENGTH_LONG).show();
-      }
-    }
-    
-    // Initialize Looking Classifier (determines if user is looking at camera)
-    try {
-      lookingClassifier = new LookingClassifier();
-      boolean ok = lookingClassifier.initialize(this);
-      if (ok) {
-        Log.i("LookingClassifier", "✓ Looking Classifier initialized successfully");
-      } else {
-        Log.e("LookingClassifier", "Looking Classifier initialization failed: " + lookingClassifier.getLastInitError());
-        // Keep the instance for debugging (isInitialized() will remain false)
-      }
-    } catch (Exception e) {
-      Log.e("LookingClassifier", "Looking Classifier error: " + e.getMessage(), e);
-      // Keep null on hard crash here
-      lookingClassifier = null;
-    }
-
-    // Create QNN networks for landmark and gaze estimation (and face detection fallback)
-    // QNN replaces SNPE for running DLC files
-    try {
-      Log.i("QNN", "════════════════════════════════════════");
-      Log.i("QNN", "Initializing QNN networks for DLC models...");
-      Log.i("QNN", "════════════════════════════════════════");
-      
-      // Check if QNN is available
-      if (!QNNModelRunner.isQnnAvailable()) {
-        Log.e("QNN", "QNN is not available on this device. Please ensure QNN libraries are installed.");
-        Toast.makeText(this, "QNN not available. Please install QNN SDK libraries.", Toast.LENGTH_LONG).show();
-        return;
-      }
-      
-      // Only initialize QNN face detection if TFLite is not being used or failed
-      if (!DemoConfig.USE_TFLITE_FACE_DETECTION || tfliteFaceDetector == null) {
-        // Use face_detection_model_out ("bbox_det") as the output tensor name
-        // Use GPU backend (not HTP) for better compatibility
-        face_detection_qnn = setupQNNNetwork(DemoConfig.face_detection_model_path, DemoConfig.face_detection_model_out, QNNModelRunner.Backend.GPU);
-        if (face_detection_qnn != null) {
-          Log.i("QNN", "✓ QNN Face Detection network loaded: " + face_detection_qnn.getBackendInfo());
-        }
-      } else {
-        Log.i("QNN", "Using TFLite for face detection, skipping QNN face detection");
-      }
-      
-      // Load landmark detection DLC with QNN
-      // Use landmark_detection_model_out ("facial_landmark") as the output tensor name, NOT landmark_detection_model_op_out ("Gemm_137")
-      // Use GPU backend (not HTP) for better compatibility
-      landmark_detection_qnn = setupQNNNetwork(DemoConfig.landmark_detection_model_path, DemoConfig.landmark_detection_model_out, QNNModelRunner.Backend.GPU);
-      if (landmark_detection_qnn != null) {
-        Log.i("QNN", "✓ QNN Landmark Detection network loaded: " + landmark_detection_qnn.getBackendInfo());
-      }
-      
-      // Load gaze estimation DLC with QNN
-      // Use gaze_estimation_model_out ("gaze_pitchyaw") as the output tensor name, NOT gaze_estimation_model_op_out ("Gemm_602")
-      // Use GPU backend (not HTP) for better compatibility
-      gaze_estimation_qnn = setupQNNNetwork(DemoConfig.gaze_estimation_model_path, DemoConfig.gaze_estimation_model_out, QNNModelRunner.Backend.GPU);
-      if (gaze_estimation_qnn != null) {
-        Log.i("QNN", "✓ QNN Gaze Estimation network loaded: " + gaze_estimation_qnn.getBackendInfo());
-      }
-
-      if ((!DemoConfig.USE_TFLITE_FACE_DETECTION && face_detection_qnn == null) || 
-          landmark_detection_qnn == null || gaze_estimation_qnn == null) {
-        Log.e("QNN", "Failed to initialize one or more QNN networks");
-        Toast.makeText(this, "QNN initialization failed. Some features may not work.", Toast.LENGTH_LONG).show();
-      } else {
-        Log.i("QNN", "════════════════════════════════════════");
-        Log.i("QNN", "✓ All QNN networks initialized successfully");
-        Log.i("QNN", "════════════════════════════════════════");
-      }
-    } catch (Exception e) {
-      Log.e("QNN", "QNN initialization failed: " + e.getMessage(), e);
-      Toast.makeText(this, "QNN unavailable: " + e.getMessage(), Toast.LENGTH_LONG).show();
-    }
-
     smoother_list = new SmootherList();
+
+    // IMPORTANT: do NOT block the UI thread here (can cause LauncherActivity ANR during transition).
+    startModelsInitAsync();
+  }
+
+  /**
+   * Initialize all ML models/delegates off the UI thread to avoid ANRs.
+   * Uses CameraActivity's inference HandlerThread via runInBackground().
+   */
+  private void startModelsInitAsync() {
+    synchronized (modelInitLock) {
+      if (modelsInitStarted) return;
+      modelsInitStarted = true;
+      modelsReady = false;
+    }
+
+    runInBackground(() -> {
+      Log.i("Init", "Starting async model initialization (background)...");
+
+      // --- TFLite Face Detector ---
+      if (DemoConfig.USE_TFLITE_FACE_DETECTION) {
+        try {
+          TFLiteFaceDetector fd = new TFLiteFaceDetector(this);
+          fd.initialize();
+          fd.setFaceDetectionThreshold(DemoConfig.tflite_face_detection_threshold);
+          fd.setMinFaceSize(DemoConfig.tflite_min_face_size);
+          fd.setNmsIouThreshold(DemoConfig.tflite_nms_iou_threshold);
+          tfliteFaceDetector = fd;
+          Log.i("TFLiteFace", "✓ TFLite Face Detector initialized: " + fd.getAcceleratorType());
+        } catch (Exception e) {
+          Log.e("TFLiteFace", "TFLite Face Detector initialization failed, falling back to QNN", e);
+          tfliteFaceDetector = null;
+          runOnUiThread(() ->
+              Toast.makeText(this, "TFLite face detection failed, using QNN fallback", Toast.LENGTH_LONG).show());
+        }
+      }
+
+      // --- Looking Classifier (TFLite) ---
+      try {
+        LookingClassifier lc = new LookingClassifier();
+        boolean ok = lc.initialize(this);
+        lookingClassifier = lc;
+        if (ok) {
+          Log.i("LookingClassifier", "✓ Looking Classifier initialized successfully (" + lc.getAcceleratorType() + ")");
+        } else {
+          Log.e("LookingClassifier", "Looking Classifier initialization failed: " + lc.getLastInitError());
+        }
+      } catch (Exception e) {
+        Log.e("LookingClassifier", "Looking Classifier error: " + e.getMessage(), e);
+        lookingClassifier = null;
+      }
+
+      // --- QNN DLC networks ---
+      try {
+        Log.i("QNN", "Initializing QNN networks for DLC models (background)...");
+
+        if (!QNNModelRunner.isQnnAvailable()) {
+          Log.e("QNN", "QNN is not available on this device. Please ensure QNN libraries are installed.");
+          runOnUiThread(() ->
+              Toast.makeText(this, "QNN not available. Please install QNN SDK libraries.", Toast.LENGTH_LONG).show());
+        } else {
+          // Only initialize QNN face detection if TFLite is not being used or failed
+          if (!DemoConfig.USE_TFLITE_FACE_DETECTION || tfliteFaceDetector == null) {
+            face_detection_qnn =
+                setupQNNNetwork(DemoConfig.face_detection_model_path, DemoConfig.face_detection_model_out, QNNModelRunner.Backend.GPU);
+            if (face_detection_qnn != null) {
+              Log.i("QNN", "✓ QNN Face Detection network loaded: " + face_detection_qnn.getBackendInfo());
+            }
+          } else {
+            Log.i("QNN", "Using TFLite for face detection, skipping QNN face detection");
+          }
+
+          landmark_detection_qnn =
+              setupQNNNetwork(DemoConfig.landmark_detection_model_path, DemoConfig.landmark_detection_model_out, QNNModelRunner.Backend.GPU);
+          if (landmark_detection_qnn != null) {
+            Log.i("QNN", "✓ QNN Landmark Detection network loaded: " + landmark_detection_qnn.getBackendInfo());
+          }
+
+          gaze_estimation_qnn =
+              setupQNNNetwork(DemoConfig.gaze_estimation_model_path, DemoConfig.gaze_estimation_model_out, QNNModelRunner.Backend.GPU);
+          if (gaze_estimation_qnn != null) {
+            Log.i("QNN", "✓ QNN Gaze Estimation network loaded: " + gaze_estimation_qnn.getBackendInfo());
+          }
+
+          if ((!DemoConfig.USE_TFLITE_FACE_DETECTION && face_detection_qnn == null) ||
+              landmark_detection_qnn == null || gaze_estimation_qnn == null) {
+            Log.e("QNN", "Failed to initialize one or more QNN networks");
+            runOnUiThread(() ->
+                Toast.makeText(this, "QNN initialization failed. Some features may not work.", Toast.LENGTH_LONG).show());
+          } else {
+            Log.i("QNN", "✓ All QNN networks initialized successfully");
+          }
+        }
+      } catch (Exception e) {
+        Log.e("QNN", "QNN initialization failed: " + e.getMessage(), e);
+        runOnUiThread(() ->
+            Toast.makeText(this, "QNN unavailable: " + e.getMessage(), Toast.LENGTH_LONG).show());
+      }
+
+      modelsReady = true;
+      Log.i("Init", "✓ Async model initialization complete (modelsReady=true)");
+    });
   }
 
   long inferencetime;
@@ -743,6 +762,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     }
     
     final boolean minimalMode = minimalModeEnabled;
+
+    // Avoid spamming logs / doing work until models are initialized.
+    if (!modelsReady) {
+      if (!minimalMode) {
+        // Log rarely (once per ~2s) while waiting.
+        if ((SystemClock.uptimeMillis() % 2000L) < 50L) {
+          Log.i("Init", "Waiting for models to initialize...");
+        }
+      }
+      return rgbFrameBitmap;
+    }
     
     // Check if required networks are initialized (using QNN now)
     boolean hasFaceDetection = (DemoConfig.USE_TFLITE_FACE_DETECTION && tfliteFaceDetector != null) || 

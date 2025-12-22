@@ -33,6 +33,19 @@
             tools:context="org.tensorflow.lite.examples.gaze_estimation.CameraActivity"
             tools:visibility="visible" />
 
+        <!-- Simple non-blocking loading overlay for background model init -->
+        <TextView
+            android:id="@+id/model_loading_text"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#80000000"
+            android:gravity="center"
+            android:text="Loading models…"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
     </RelativeLayout>
 
     <include

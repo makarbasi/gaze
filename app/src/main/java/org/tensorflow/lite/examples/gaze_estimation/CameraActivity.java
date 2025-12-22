@@ -44,6 +44,7 @@ import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.View;
+import android.widget.TextView;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.AdapterView;
@@ -334,39 +335,48 @@ public abstract class CameraActivity extends AppCompatActivity
 //    setSupportActionBar(toolbar);
 //    getSupportActionBar().setDisplayShowTitleEnabled(false);
 
-    // TEST MODEL LOADING BEFORE CAMERA
-    testModelLoading();
-    
-    if (!modelsTestedSuccessfully) {
-      // Show error and don't proceed to camera
-      String errorMsg = "Model loading failed!\n\n" + 
-          (modelTestErrorMessage != null ? modelTestErrorMessage : "Unknown error") +
-          "\nCheck logcat for details (filter: ModelTest)";
-      
-      new androidx.appcompat.app.AlertDialog.Builder(this)
-          .setTitle("Model Loading Failed")
-          .setMessage(errorMsg)
-          .setPositiveButton("Exit", (dialog, which) -> finish())
-          .setNegativeButton("Continue Anyway", (dialog, which) -> {
-            // User chose to continue anyway
-            if (hasPermission()) {
-              setFragment();
-            } else {
-              requestPermission();
-            }
-          })
-          .setCancelable(false)
-          .show();
-      return;
-    }
-    
-    Log.i("CameraActivity", "Models loaded successfully, proceeding to camera setup");
+    // Run model-loading test on a background thread to avoid ANR during activity transitions.
+    final TextView loadingText = findViewById(R.id.model_loading_text);
+    if (loadingText != null) loadingText.setVisibility(View.VISIBLE);
 
-    if (hasPermission()) {
-      setFragment();
-    } else {
-      requestPermission();
-    }
+    new Thread(() -> {
+      // TEST MODEL LOADING BEFORE CAMERA (background)
+      testModelLoading();
+
+      runOnUiThread(() -> {
+        if (loadingText != null) loadingText.setVisibility(View.GONE);
+
+        if (!modelsTestedSuccessfully) {
+          // Show error and don't proceed to camera
+          String errorMsg = "Model loading failed!\n\n" +
+              (modelTestErrorMessage != null ? modelTestErrorMessage : "Unknown error") +
+              "\nCheck logcat for details (filter: ModelTest)";
+
+          new androidx.appcompat.app.AlertDialog.Builder(this)
+              .setTitle("Model Loading Failed")
+              .setMessage(errorMsg)
+              .setPositiveButton("Exit", (dialog, which) -> finish())
+              .setNegativeButton("Continue Anyway", (dialog, which) -> {
+                // User chose to continue anyway
+                if (hasPermission()) {
+                  setFragment();
+                } else {
+                  requestPermission();
+                }
+              })
+              .setCancelable(false)
+              .show();
+          return;
+        }
+
+        Log.i("CameraActivity", "Models loaded successfully, proceeding to camera setup");
+        if (hasPermission()) {
+          setFragment();
+        } else {
+          requestPermission();
+        }
+      });
+    }, "model-test").start();
 
 //    threadsTextView = findViewById(R.id.threads);
 //    plusImageView = findViewById(R.id.plus);

@@ -129,6 +129,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private long fpsWindowStartMs = 0L;
   private int fpsWindowFrames = 0;
   private volatile float processedFps = 0f;
+
+  // Lightweight per-frame profiling (logged at most once per second when DisplayConfig.debugLogs=true)
+  private long lastPerfLogMs = 0L;
   
   // Minimal overlay mode (UI)
   private volatile boolean minimalModeEnabled = false;
@@ -784,8 +787,29 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       Log.e("QNN", "Networks not initialized, skipping frame processing");
       return rgbFrameBitmap;
     }
-    
-    rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
+
+    final boolean perfLogs = DisplayConfig.getInstance().debugLogs;
+    final long perfT0 = perfLogs ? SystemClock.uptimeMillis() : 0L;
+    long tRgbMs = 0L;
+    long tRoiMs = 0L;
+    long tFaceDetMs = 0L;
+    long tBitmap2MatMs = 0L;
+    long tLmPreMs = 0L;
+    long tLmInfMs = 0L;
+    long tGazePreMs = 0L;
+    long tGazeInfMs = 0L;
+    long tClassifierMs = 0L;
+
+    if (perfLogs) {
+      long t = SystemClock.uptimeMillis();
+      int[] rgb = getRgbBytes(); // includes YUV->RGB conversion
+      tRgbMs += (SystemClock.uptimeMillis() - t);
+      t = SystemClock.uptimeMillis();
+      rgbFrameBitmap.setPixels(rgb, 0, previewWidth, 0, 0, previewWidth, previewHeight);
+      tRgbMs += (SystemClock.uptimeMillis() - t);
+    } else {
+      rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
+    }
 
     // Get crop region settings from config
     DisplayConfig cropConfig = DisplayConfig.getInstance();
@@ -794,6 +818,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Apply region-of-interest cropping for wide FOV cameras
     // crop_offset_x: 0.0=left, 0.25=left-quarter, 0.5=center, 0.75=right-quarter, 1.0=right
     // crop_scale: 0.5=use half width (2x zoom), 1.0=use full width
+    final long roiStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
     RegionResult region = extractRegionWithInfo(
         rgbFrameBitmap, cropConfig.cropOffsetX, cropConfig.cropOffsetY, cropConfig.cropScale);
     Bitmap regionBitmap = region.bitmap;
@@ -815,6 +840,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     regionToCropTransform.invert(cropToRegionTransform);
     
     canvas.drawBitmap(regionBitmap, regionToCropTransform, null);
+    if (perfLogs) {
+      tRoiMs = SystemClock.uptimeMillis() - roiStartMs;
+    }
 
     if (DemoConfig.USE_FRONT_CAM) {
       // flip the camera image
@@ -863,6 +891,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       inferStartTime = SystemClock.uptimeMillis();
       boxes = tfliteFaceDetector.detectFaces(processedBitmap);
       inferencetime += SystemClock.uptimeMillis() - inferStartTime;
+      if (perfLogs) {
+        tFaceDetMs = SystemClock.uptimeMillis() - inferStartTime;
+      }
       if (!minimalMode) {
         Log.d("TFLiteFace", "TFLite face detection: " + (boxes != null ? boxes.length : 0) + " faces, threshold=" + displayConfig.faceDetectionThreshold);
       }
@@ -895,7 +926,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
     // Use the same image for all processing (corrected if fisheye enabled)
     // This ensures bounding boxes and landmarks align correctly
+    final long b2mStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
     Mat img = bitmap2mat(processedBitmap);
+    if (perfLogs) {
+      tBitmap2MatMs = SystemClock.uptimeMillis() - b2mStartMs;
+    }
     // Log.d("DEBUG_IMG_SIZE", img.size() + " " + processedBitmap.getWidth() + "x"+processedBitmap.getHeight());
 
     Vector<float[]> landmarks = new Vector<float[]>();
@@ -953,7 +988,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         
         // Preprocess face for landmark detection
         // If fisheye enabled, correction is applied to the 112x112 face crop (much faster than 480x480!)
+        final long lmPreStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
         ProcessFactory.LandmarkPreprocessResult landmark_preprocess_result = landmark_preprocess(img, box);
+        if (perfLogs) {
+          tLmPreMs += (SystemClock.uptimeMillis() - lmPreStartMs);
+        }
         
         // Apply fisheye correction to the face crop if enabled
         if (fisheyeUiEnabled && displayConfig.fisheyeEnabled) {
@@ -970,6 +1009,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         inferStartTime = SystemClock.uptimeMillis();
         NNoutput = landmark_detection_qnn.runInference("face_image", landmark_detection_input, landmarkInputDims);
         inferencetime += SystemClock.uptimeMillis() - inferStartTime;
+        if (perfLogs) {
+          tLmInfMs += (SystemClock.uptimeMillis() - inferStartTime);
+        }
         
         if (NNoutput != null) {
             if (!minimalMode) {
@@ -987,7 +1029,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             landmarks.addElement(landmark);
 
             // ==== GAZE ESTIMATION with QNN ====
+            final long gazePreStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
             ProcessFactory.GazePreprocessResult gaze_preprocess_result = gaze_preprocess(img, landmark);
+            if (perfLogs) {
+              tGazePreMs += (SystemClock.uptimeMillis() - gazePreStartMs);
+            }
             rvecs.addElement(gaze_preprocess_result.rvec);
             tvecs.addElement(gaze_preprocess_result.tvec);
             camera_matrix = gaze_preprocess_result.camera_matrix;
@@ -1008,6 +1054,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             inferStartTime = SystemClock.uptimeMillis();
             float[] gazeOutput = gaze_estimation_qnn.runMultiInputInference(inputNames, inputDataArrays, inputDimsArrays);
             inferencetime += SystemClock.uptimeMillis() - inferStartTime;
+            if (perfLogs) {
+              tGazeInfMs += (SystemClock.uptimeMillis() - inferStartTime);
+            }
             
             if (gazeOutput != null) {
                 // Log.d("QNN", "Gaze estimation output: " + gazeOutput[0] + " " + gazeOutput[1]);
@@ -1049,8 +1098,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
                     // - landmarks from landmark_postprocess() (image coordinates of the SAME processed frame)
                     //
                     // So we must feed the classifier the *exact same* raw values without any extra remapping.
+                    final long clsStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
                     isLookingAtCamera = lookingClassifier.predict(gaze_pitchyaw, gaze_preprocess_result.rvec, landmark);
                     lookingProbability = lookingClassifier.getLastProbability();
+                    if (perfLogs) {
+                      tClassifierMs += (SystemClock.uptimeMillis() - clsStartMs);
+                    }
                     if (!minimalMode) {
                       if (DisplayConfig.getInstance().debugLogs) {
                         Log.d("LookingClassifier", "Result: looking=" + isLookingAtCamera + ", prob=" + lookingProbability);
@@ -1132,6 +1185,25 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     }
     lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
     latency=lastProcessingTimeMs;
+
+    if (perfLogs) {
+      long now = SystemClock.uptimeMillis();
+      if (now - lastPerfLogMs >= 1000L) {
+        lastPerfLogMs = now;
+        long totalMs = SystemClock.uptimeMillis() - perfT0;
+        Log.i("Perf", "processImage ms: total=" + totalMs +
+            " rgb=" + tRgbMs +
+            " roi=" + tRoiMs +
+            " faceDet=" + tFaceDetMs +
+            " b2m=" + tBitmap2MatMs +
+            " lmPre=" + tLmPreMs +
+            " lmInf=" + tLmInfMs +
+            " gazePre=" + tGazePreMs +
+            " gazeInf=" + tGazeInfMs +
+            " cls=" + tClassifierMs +
+            " (inferSum=" + inferencetime + ")");
+      }
+    }
 
     runInBackground(
         new Runnable() {

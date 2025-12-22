@@ -93,8 +93,9 @@ public abstract class CameraActivity extends AppCompatActivity
   // ==========================================================
   // Performance: frame skipping (process 1 in N frames)
   // ==========================================================
-  // Quick win: N=3 => ~3x less compute load at the cost of lower temporal resolution.
-  private static final int PROCESS_EVERY_N_FRAMES = 3;
+  // NOTE: Set to 1 to process every frame (no forced skipping).
+  // This used to be 3 for a quick performance win, but it hard-caps processed FPS.
+  private static final int PROCESS_EVERY_N_FRAMES = 1;
   private int frameCounter = 0;
   private LinearLayout gestureLayout;
   private BottomSheetBehavior sheetBehavior;
@@ -546,16 +547,7 @@ public abstract class CameraActivity extends AppCompatActivity
         return;
       }
       
-      // Optional: enforce minimum interval between processed frames
-      DisplayConfig config = DisplayConfig.getInstance();
-      if (config.minFrameIntervalMs > 0) {
-        long now = System.currentTimeMillis();
-        if (now - lastProcessedFrameTime < config.minFrameIntervalMs) {
-          image.close();
-          return;
-        }
-        lastProcessedFrameTime = now;
-      }
+      // NOTE: Removed min_frame_interval_ms throttling to avoid artificially low FPS.
       
       isProcessingFrame = true;
       Trace.beginSection("imageAvailable");

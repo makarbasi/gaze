@@ -27,14 +27,18 @@ public class DrawUtils {
         int G_color = Color.rgb(0,255,0);
         int R_color = Color.rgb(255,0,0);
         int B_color = Color.rgb(255,255,0);
-        Log.d("yolox_output_boxes", String.valueOf(boxes.length));
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("yolox_output_boxes", String.valueOf(boxes.length));
+        }
         for(int b = 0; b < boxes.length; b++){
             int box_color = G_color;
             int x1 = (int)(boxes[b][0]);
             int y1 = (int)(boxes[b][1]);
             int x2 = (int)(boxes[b][2]);
             int y2 = (int)(boxes[b][3]);
-            Log.d("yolox_output_coord", String.valueOf(x1)+" "+String.valueOf(y1)+" "+String.valueOf(x2)+" "+String.valueOf(y2));
+            if (DisplayConfig.getInstance().shouldVerboseLog()) {
+                Log.d("yolox_output_coord", String.valueOf(x1)+" "+String.valueOf(y1)+" "+String.valueOf(x2)+" "+String.valueOf(y2));
+            }
 
             for (int l = line_pad * -1; l <= line_pad; l++) {
                 x1 = max(min(x1 + l, res_w - 1), 0);
@@ -163,10 +167,14 @@ public class DrawUtils {
         MatOfPoint2f modelpts = new MatOfPoint2f();
         Calib3d.projectPoints(axis, rvec, tvec, camera_matrix, camera_distortion, imgpts);
         Calib3d.projectPoints(face_model, rvec, tvec, camera_matrix, camera_distortion, modelpts);
-        Log.d("HEADPOSE_DEBUG", imgpts.size().toString() + " " + modelpts.size().toString());
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("HEADPOSE_DEBUG", imgpts.size().toString() + " " + modelpts.size().toString());
+        }
         double[] img_pt = imgpts.get(3, 0);
         double[] model_pt = modelpts.get(13, 0);
-        Log.d("HEADPOSE_DEBUG", img_pt[0] + " " + img_pt[1] + "," + model_pt[0] + " " + model_pt[1]);
+        if (DisplayConfig.getInstance().shouldVerboseLog()) {
+            Log.d("HEADPOSE_DEBUG", img_pt[0] + " " + img_pt[1] + "," + model_pt[0] + " " + model_pt[1]);
+        }
         Point delta = new Point(model_pt[0] - img_pt[0], model_pt[1] - img_pt[1]);
         Point[] imgpt_array = imgpts.toArray();
         for (int i=0;i<3;i++) {

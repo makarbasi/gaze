@@ -136,6 +136,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // Minimal overlay mode (UI)
   private volatile boolean minimalModeEnabled = false;
   private SwitchCompat minimalModeSwitch;
+
+  // When Minimal overlay mode is enabled, we temporarily force-disable debugLogs.
+  // This prevents spam even if the config file has debugLogs=true.
+  private Boolean prevDebugLogs = null;
   
   // Fisheye toggle (UI). When OFF, fisheye correction is never executed.
   private volatile boolean fisheyeUiEnabled = true;
@@ -321,7 +325,20 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     // Mute verbose logging globally while Minimal overlay mode is enabled.
     // This suppresses spammy per-frame logs from Java + native (QNN) code paths.
     DisplayConfig cfg = DisplayConfig.getInstance();
-    cfg.setRuntimeLogMute(enabled);
+    if (enabled) {
+      if (prevDebugLogs == null) {
+        prevDebugLogs = cfg.debugLogs;
+      }
+      // Force-disable verbose logs while in minimal mode (regardless of config file setting).
+      cfg.debugLogs = false;
+      cfg.setRuntimeLogMute(true);
+    } else {
+      cfg.setRuntimeLogMute(false);
+      if (prevDebugLogs != null) {
+        cfg.debugLogs = prevDebugLogs;
+        prevDebugLogs = null;
+      }
+    }
     QNNModelRunner.setVerboseLoggingEnabled(cfg.shouldVerboseLog());
   }
   

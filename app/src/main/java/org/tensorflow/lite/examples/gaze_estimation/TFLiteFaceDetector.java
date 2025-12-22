@@ -2,6 +2,7 @@ package org.tensorflow.lite.examples.gaze_estimation;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.os.Build;
 import android.util.Log;
@@ -44,6 +45,19 @@ public class TFLiteFaceDetector {
     // Face detection model parameters
     private static final int FACE_DET_WIDTH = 640;
     private static final int FACE_DET_HEIGHT = 480;
+
+    // Reusable buffers to avoid per-frame allocations (big FPS win)
+    private Bitmap reuseScaledBitmap = null;
+    private Canvas reuseScaleCanvas = null;
+    private Rect reuseSrcRect = null;
+    private Rect reuseDstRect = null;
+    private int[] reuseIntPixels = null;
+    private ByteBuffer reuseInputBuffer = null;
+
+    // Reusable output buffers (allocated after interpreter is created)
+    private byte[][][][] out0 = null;
+    private byte[][][][] out1 = null;
+    private byte[][][][] out2 = null;
     
     // Face detection thresholds
     private float faceDetectionThreshold = 0.5f;
@@ -140,6 +154,22 @@ public class TFLiteFaceDetector {
         }
 
         isInitialized = true;
+
+        // Allocate reusable IO buffers once (avoids huge per-frame churn)
+        reuseScaledBitmap = Bitmap.createBitmap(FACE_DET_WIDTH, FACE_DET_HEIGHT, Bitmap.Config.ARGB_8888);
+        reuseScaleCanvas = new Canvas(reuseScaledBitmap);
+        reuseSrcRect = new Rect(0, 0, 0, 0);
+        reuseDstRect = new Rect(0, 0, FACE_DET_WIDTH, FACE_DET_HEIGHT);
+        reuseIntPixels = new int[FACE_DET_WIDTH * FACE_DET_HEIGHT];
+        reuseInputBuffer = ByteBuffer.allocateDirect(FACE_DET_WIDTH * FACE_DET_HEIGHT);
+        reuseInputBuffer.order(ByteOrder.nativeOrder());
+
+        int[] shape0 = interpreter.getOutputTensor(0).shape();
+        int[] shape1 = interpreter.getOutputTensor(1).shape();
+        int[] shape2 = interpreter.getOutputTensor(2).shape();
+        out0 = new byte[shape0[0]][shape0[1]][shape0[2]][shape0[3]];
+        out1 = new byte[shape1[0]][shape1[1]][shape1[2]][shape1[3]];
+        out2 = new byte[shape2[0]][shape2[1]][shape2[2]][shape2[3]];
         
         Log.i(TAG, "════════════════════════════════════════");
         Log.i(TAG, "✓ Face Detection Ready");
@@ -160,18 +190,41 @@ public class TFLiteFaceDetector {
         }
         
         try {
-            // Scale bitmap to 640x480
-            Bitmap resizedBitmap = Bitmap.createScaledBitmap(bitmap, FACE_DET_WIDTH, FACE_DET_HEIGHT, true);
+            // Scale bitmap to 640x480 (reuse buffers to avoid allocations)
+            Bitmap resizedBitmap;
+            if (bitmap.getWidth() == FACE_DET_WIDTH && bitmap.getHeight() == FACE_DET_HEIGHT) {
+                resizedBitmap = bitmap;
+            } else {
+                // Reuse a single 640x480 bitmap + canvas for scaling
+                if (reuseScaledBitmap == null || reuseScaleCanvas == null) {
+                    reuseScaledBitmap = Bitmap.createBitmap(FACE_DET_WIDTH, FACE_DET_HEIGHT, Bitmap.Config.ARGB_8888);
+                    reuseScaleCanvas = new Canvas(reuseScaledBitmap);
+                    reuseDstRect = new Rect(0, 0, FACE_DET_WIDTH, FACE_DET_HEIGHT);
+                }
+                if (reuseSrcRect == null) reuseSrcRect = new Rect(0, 0, 0, 0);
+                reuseSrcRect.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
+                reuseScaleCanvas.drawBitmap(bitmap, reuseSrcRect, reuseDstRect, null);
+                resizedBitmap = reuseScaledBitmap;
+            }
             
             // Store scale factors to map back to original coordinates
             float scaleX = (float) bitmap.getWidth() / FACE_DET_WIDTH;
             float scaleY = (float) bitmap.getHeight() / FACE_DET_HEIGHT;
             
             // Create input buffer - GRAYSCALE (1 channel), UINT8 quantized
-            ByteBuffer inputBuffer = ByteBuffer.allocateDirect(FACE_DET_WIDTH * FACE_DET_HEIGHT);
-            inputBuffer.order(ByteOrder.nativeOrder());
+            ByteBuffer inputBuffer = reuseInputBuffer;
+            if (inputBuffer == null) {
+                inputBuffer = ByteBuffer.allocateDirect(FACE_DET_WIDTH * FACE_DET_HEIGHT);
+                inputBuffer.order(ByteOrder.nativeOrder());
+                reuseInputBuffer = inputBuffer;
+            }
+            inputBuffer.rewind();
             
-            int[] intValues = new int[FACE_DET_WIDTH * FACE_DET_HEIGHT];
+            int[] intValues = reuseIntPixels;
+            if (intValues == null) {
+                intValues = new int[FACE_DET_WIDTH * FACE_DET_HEIGHT];
+                reuseIntPixels = intValues;
+            }
             resizedBitmap.getPixels(intValues, 0, FACE_DET_WIDTH, 0, 0, FACE_DET_WIDTH, FACE_DET_HEIGHT);
             
             // Convert RGB to grayscale: Y = 0.299*R + 0.587*G + 0.114*B
@@ -184,33 +237,30 @@ public class TFLiteFaceDetector {
             }
             inputBuffer.rewind();
             
-            // Query output tensor shapes
-            int outputCount = interpreter.getOutputTensorCount();
-            Log.d(TAG, "Model has " + outputCount + " outputs");
-            
-            // Get output tensor shapes
-            int[] shape0 = interpreter.getOutputTensor(0).shape();
-            int[] shape1 = interpreter.getOutputTensor(1).shape();
-            int[] shape2 = interpreter.getOutputTensor(2).shape();
-            
-            // Allocate output arrays
-            byte[][][][] outputArray0 = new byte[shape0[0]][shape0[1]][shape0[2]][shape0[3]];
-            byte[][][][] outputArray1 = new byte[shape1[0]][shape1[1]][shape1[2]][shape1[3]];
-            byte[][][][] outputArray2 = new byte[shape2[0]][shape2[1]][shape2[2]][shape2[3]];
-            
-            Object[] outputs = new Object[3];
-            outputs[0] = outputArray0;
-            outputs[1] = outputArray1;
-            outputs[2] = outputArray2;
+            // Reuse output arrays allocated at init
+            byte[][][][] outputArray0 = out0;
+            byte[][][][] outputArray1 = out1;
+            byte[][][][] outputArray2 = out2;
+            if (outputArray0 == null || outputArray1 == null || outputArray2 == null) {
+                // Shouldn't happen, but keep a safe fallback
+                int[] shape0 = interpreter.getOutputTensor(0).shape();
+                int[] shape1 = interpreter.getOutputTensor(1).shape();
+                int[] shape2 = interpreter.getOutputTensor(2).shape();
+                outputArray0 = new byte[shape0[0]][shape0[1]][shape0[2]][shape0[3]];
+                outputArray1 = new byte[shape1[0]][shape1[1]][shape1[2]][shape1[3]];
+                outputArray2 = new byte[shape2[0]][shape2[1]][shape2[2]][shape2[3]];
+                out0 = outputArray0;
+                out1 = outputArray1;
+                out2 = outputArray2;
+            }
             
             // Run inference
             long startTime = System.currentTimeMillis();
-            interpreter.runForMultipleInputsOutputs(new Object[]{inputBuffer}, 
-                new java.util.HashMap<Integer, Object>() {{
-                    put(0, outputArray0);
-                    put(1, outputArray1);
-                    put(2, outputArray2);
-                }});
+            java.util.HashMap<Integer, Object> outputs = new java.util.HashMap<>();
+            outputs.put(0, outputArray0);
+            outputs.put(1, outputArray1);
+            outputs.put(2, outputArray2);
+            interpreter.runForMultipleInputsOutputs(new Object[]{inputBuffer}, outputs);
             long inferenceTime = System.currentTimeMillis() - startTime;
             Log.d(TAG, "Face detection inference: " + inferenceTime + "ms");
             
@@ -218,15 +268,18 @@ public class TFLiteFaceDetector {
             byte[][][][] heatmapOutput;
             byte[][][][] bboxOutput;
             
-            if (shape0[3] == 1) {
+            // Shapes are stable; infer from arrays we have
+            int ch0 = outputArray0[0][0][0].length;
+            int ch1 = outputArray1[0][0][0].length;
+            if (ch0 == 1) {
                 heatmapOutput = outputArray0;
-                bboxOutput = (shape1[3] == 4) ? outputArray1 : outputArray2;
-            } else if (shape1[3] == 1) {
+                bboxOutput = (ch1 == 4) ? outputArray1 : outputArray2;
+            } else if (ch1 == 1) {
                 heatmapOutput = outputArray1;
-                bboxOutput = (shape0[3] == 4) ? outputArray0 : outputArray2;
+                bboxOutput = (ch0 == 4) ? outputArray0 : outputArray2;
             } else {
                 heatmapOutput = outputArray2;
-                bboxOutput = (shape0[3] == 4) ? outputArray0 : outputArray1;
+                bboxOutput = (ch0 == 4) ? outputArray0 : outputArray1;
             }
             
             // Parse face detection results
@@ -465,6 +518,15 @@ public class TFLiteFaceDetector {
             nnApiDelegate.close();
             nnApiDelegate = null;
         }
+        reuseScaledBitmap = null;
+        reuseScaleCanvas = null;
+        reuseSrcRect = null;
+        reuseDstRect = null;
+        reuseIntPixels = null;
+        reuseInputBuffer = null;
+        out0 = null;
+        out1 = null;
+        out2 = null;
         isInitialized = false;
         Log.i(TAG, "TFLite Face Detector closed");
     }

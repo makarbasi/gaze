@@ -21,6 +21,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         
+        <!-- OpenCL libraries for GPU delegate (Android 12+) -->
+        <uses-library android:name="libOpenCL.so" android:required="false"/>
+        <uses-library android:name="libOpenCL-pixel.so" android:required="false"/>
+        
         <!-- Launcher Activity - Main entry point -->
         <activity
             android:name="org.tensorflow.lite.examples.gaze_estimation.LauncherActivity"

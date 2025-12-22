@@ -137,7 +137,8 @@ dependencies {
     // NOTE: looking_classifier_v2.tflite requires a newer TFLite runtime (FULLY_CONNECTED op v12).
     // 2.16.x is still too old for some newer builtin op versions produced by recent converters.
     // If you still see: FULLY_CONNECTED version '12' not found -> bump this further.
-    def tfliteVersion = '2.17.0'
+    // Updated to 2.18.0 for better GPU delegate compatibility
+    def tfliteVersion = '2.18.0'
     implementation "org.tensorflow:tensorflow-lite:${tfliteVersion}"
     implementation "org.tensorflow:tensorflow-lite-gpu:${tfliteVersion}"
     // NOTE: We avoid tensorflow-lite-support to prevent duplicate classes with newer TFLite/LiteRT.

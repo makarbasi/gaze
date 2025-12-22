@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Keep TensorFlow Lite GPU delegate classes
+-keep class org.tensorflow.lite.gpu.** { *; }

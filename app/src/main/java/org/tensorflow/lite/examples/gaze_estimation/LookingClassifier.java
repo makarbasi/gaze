@@ -93,11 +93,20 @@ public class LookingClassifier {
                 Interpreter.Options options = new Interpreter.Options();
                 // GPU delegate ignores numThreads for most ops, but harmless.
                 options.setNumThreads(2);
+                // Try basic GpuDelegate constructor (compatible with TFLite 2.17.0)
                 gpuDelegate = new GpuDelegate();
                 options.addDelegate(gpuDelegate);
                 interpreter = new Interpreter(modelBuffer, options);
                 acceleratorType = "GPU (TFLite GPU delegate)";
                 Log.i(TAG, "✓ Looking classifier using GPU delegate");
+            } catch (NoClassDefFoundError | UnsatisfiedLinkError e) {
+                // GPU delegate library not available or incompatible
+                Log.w(TAG, "GPU delegate library not available: " + e.getMessage());
+                try {
+                    if (gpuDelegate != null) gpuDelegate.close();
+                } catch (Throwable ignored) {}
+                gpuDelegate = null;
+                interpreter = null;
             } catch (Throwable gpuErr) {
                 // GPU delegate might not be supported on this device / driver / model.
                 Log.w(TAG, "GPU delegate unavailable for looking classifier, falling back: " + gpuErr.getMessage());

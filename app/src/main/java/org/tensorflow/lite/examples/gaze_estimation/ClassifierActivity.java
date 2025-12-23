@@ -106,6 +106,9 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   Bitmap faceCropBitmap = null;  // High-res face crop for display
   SmootherList smoother_list = null;
   
+  // Store initial bounding box positions (frozen after first detection)
+  private java.util.Map<Integer, float[]> initialBoundingBoxes = new java.util.HashMap<>();
+  
   // TFLite Face Detector (from HotGaze - more accurate)
   private TFLiteFaceDetector tfliteFaceDetector = null;
   
@@ -993,12 +996,26 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
       smoother_list.autoclean();
       smoother_list.match(boxes);
+      
+      // Clean up initial bounding boxes for faces that are no longer detected
+      // Remove entries for smoother IDs that no longer exist (after match, so we know current smoothers)
+      java.util.Set<Integer> activeSmootherIds = new java.util.HashSet<>();
+      for (int i = 0; i < smoother_list.smoothers.size(); i++) {
+        activeSmootherIds.add(i);
+      }
+      initialBoundingBoxes.entrySet().removeIf(entry -> !activeSmootherIds.contains(entry.getKey()));
 
       // Note: We skip smoothing the face detection boxes here and instead smooth
       // the final 112x112 bounding boxes after landmark preprocessing for better stability
 
       for (int b=0;b<boxes.length;b++) {
         float[] box = boxes[b];
+        
+        // Get the smoother ID for this face to track if it's a new face
+        int smootherId = smoother_list.faceId2smootherId[b];
+        
+        // Check if this is the first frame for this face (no initial bounding box stored)
+        boolean isFirstFrame = !initialBoundingBoxes.containsKey(smootherId);
         
         // Preprocess face for landmark detection
         // If fisheye enabled, correction is applied to the 112x112 face crop (much faster than 480x480!)
@@ -1008,29 +1025,28 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           tLmPreMs += (SystemClock.uptimeMillis() - lmPreStartMs);
         }
         
-        // Update box to show the actual 112x112 bounding box used for landmark detection
-        box[0] = landmark_preprocess_result.x1;
-        box[1] = landmark_preprocess_result.y1;
-        box[2] = landmark_preprocess_result.x1 + landmark_preprocess_result.size;
-        box[3] = landmark_preprocess_result.y1 + landmark_preprocess_result.size;
-        
-        // Smooth the updated 112x112 bounding box coordinates to reduce jitter
-        double[] smoothed_bbox = new double[4];
-        for (int ii=0;ii<4;ii++)
-          smoothed_bbox[ii] = (double)box[ii];
-        smoothed_bbox = smoother_list.smooth(smoothed_bbox, b, CURRENT_TIMESTAMP);
-        for (int ii=0;ii<4;ii++)
-          box[ii] = (float)smoothed_bbox[ii];
-        
-        // Ensure box remains square (112x112) after smoothing
-        // Use the smoothed center and enforce 112x112 size
-        float centerX = (box[0] + box[2]) / 2.0f;
-        float centerY = (box[1] + box[3]) / 2.0f;
-        float halfSize = landmark_preprocess_result.size / 2.0f;
-        box[0] = centerX - halfSize;
-        box[1] = centerY - halfSize;
-        box[2] = centerX + halfSize;
-        box[3] = centerY + halfSize;
+        if (isFirstFrame) {
+          // First frame: Store the initial 112x112 bounding box position and freeze it
+          box[0] = landmark_preprocess_result.x1;
+          box[1] = landmark_preprocess_result.y1;
+          box[2] = landmark_preprocess_result.x1 + landmark_preprocess_result.size;
+          box[3] = landmark_preprocess_result.y1 + landmark_preprocess_result.size;
+          
+          // Store the initial position (make a copy)
+          float[] initialBox = new float[4];
+          initialBox[0] = box[0];
+          initialBox[1] = box[1];
+          initialBox[2] = box[2];
+          initialBox[3] = box[3];
+          initialBoundingBoxes.put(smootherId, initialBox);
+        } else {
+          // Subsequent frames: Use the frozen initial position
+          float[] initialBox = initialBoundingBoxes.get(smootherId);
+          box[0] = initialBox[0];
+          box[1] = initialBox[1];
+          box[2] = initialBox[2];
+          box[3] = initialBox[3];
+        }
         
         // Create high-resolution face crop with padding for the first face
         // Extract AFTER updating to 112x112 and smoothing, so the crop matches the displayed box

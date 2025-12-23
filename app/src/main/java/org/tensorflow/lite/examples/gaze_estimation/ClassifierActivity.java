@@ -1000,16 +1000,6 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       for (int b=0;b<boxes.length;b++) {
         float[] box = boxes[b];
         
-        // Create high-resolution face crop with padding for the first face
-        if (!minimalMode && b == 0) {
-          float padding = displayConfig.faceCropPadding;
-          int displaySize = displayConfig.faceCropDisplaySize;
-          currentFaceCrop = extractFaceCrop(processedBitmap, box, padding, displaySize);
-          if (currentFaceCrop != null) {
-            faceCropMat = bitmap2mat(currentFaceCrop);
-          }
-        }
-        
         // Preprocess face for landmark detection
         // If fisheye enabled, correction is applied to the 112x112 face crop (much faster than 480x480!)
         final long lmPreStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
@@ -1031,6 +1021,27 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         smoothed_bbox = smoother_list.smooth(smoothed_bbox, b, CURRENT_TIMESTAMP);
         for (int ii=0;ii<4;ii++)
           box[ii] = (float)smoothed_bbox[ii];
+        
+        // Ensure box remains square (112x112) after smoothing
+        // Use the smoothed center and enforce 112x112 size
+        float centerX = (box[0] + box[2]) / 2.0f;
+        float centerY = (box[1] + box[3]) / 2.0f;
+        float halfSize = landmark_preprocess_result.size / 2.0f;
+        box[0] = centerX - halfSize;
+        box[1] = centerY - halfSize;
+        box[2] = centerX + halfSize;
+        box[3] = centerY + halfSize;
+        
+        // Create high-resolution face crop with padding for the first face
+        // Extract AFTER updating to 112x112 and smoothing, so the crop matches the displayed box
+        if (!minimalMode && b == 0) {
+          float padding = displayConfig.faceCropPadding;
+          int displaySize = displayConfig.faceCropDisplaySize;
+          currentFaceCrop = extractFaceCrop(processedBitmap, box, padding, displaySize);
+          if (currentFaceCrop != null) {
+            faceCropMat = bitmap2mat(currentFaceCrop);
+          }
+        }
         
         // Apply fisheye correction to the face crop if enabled
         if (fisheyeUiEnabled && displayConfig.fisheyeEnabled) {
@@ -1624,7 +1635,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       int srcW = source.getWidth();
       int srcH = source.getHeight();
       
-      // Calculate box dimensions
+      // Calculate box dimensions (should be 112x112 after landmark preprocessing)
       float boxX1 = box[0];
       float boxY1 = box[1];
       float boxX2 = box[2];
@@ -1633,33 +1644,51 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       float boxH = boxY2 - boxY1;
       
       // Calculate crop size with padding (square crop)
+      // Use the box size directly since it's already 112x112 (square)
       float cropSize = Math.max(boxW, boxH) * padding;
       
       // Calculate crop center (center of face box)
       float centerX = boxX1 + boxW / 2;
       float centerY = boxY1 + boxH / 2;
       
-      // Calculate crop region
+      // Calculate crop region (ensure it's square)
       int cropX = (int)(centerX - cropSize / 2);
       int cropY = (int)(centerY - cropSize / 2);
       int cropW = (int)cropSize;
       int cropH = (int)cropSize;
       
-      // Clamp to image bounds
+      // Clamp to image bounds while maintaining square aspect ratio
       cropX = Math.max(0, cropX);
       cropY = Math.max(0, cropY);
-      if (cropX + cropW > srcW) cropW = srcW - cropX;
-      if (cropY + cropH > srcH) cropH = srcH - cropY;
+      
+      // If crop goes out of bounds, adjust position to keep it square
+      if (cropX + cropW > srcW) {
+        cropX = srcW - cropW;
+        cropX = Math.max(0, cropX); // Ensure still valid
+      }
+      if (cropY + cropH > srcH) {
+        cropY = srcH - cropH;
+        cropY = Math.max(0, cropY); // Ensure still valid
+      }
+      
+      // Recalculate actual crop size after clamping (should still be square)
+      cropW = Math.min(cropW, srcW - cropX);
+      cropH = Math.min(cropH, srcH - cropY);
+      
+      // Ensure square by using minimum dimension
+      int minDim = Math.min(cropW, cropH);
+      cropW = minDim;
+      cropH = minDim;
       
       // Ensure minimum size
       if (cropW < 10 || cropH < 10) {
         return null;
       }
       
-      // Extract the crop
+      // Extract the crop (guaranteed to be square)
       Bitmap crop = Bitmap.createBitmap(source, cropX, cropY, cropW, cropH);
       
-      // Scale to display size
+      // Scale to display size (maintains square aspect ratio)
       Bitmap scaled = Bitmap.createScaledBitmap(crop, displaySize, displaySize, true);
       
       return scaled;

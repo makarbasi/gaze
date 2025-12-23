@@ -96,8 +96,8 @@ public class DisplayConfig {
     public double landmarkBeta = 0.05;           // Landmark speed coef (LOWERED from 0.1 - less jitter)
     public double gazeMinCutoff = 0.01;          // Gaze smoothing cutoff (default 0.01)
     public double gazeBeta = 0.1;                // Gaze speed coef (LOWERED from 0.8 - much less jitter!)
-    public double faceMinCutoff = 0.01;          // Face box smoothing cutoff
-    public double faceBeta = 0.05;               // Face box speed coef (LOWERED from 0.1)
+    public double faceMinCutoff = 0.005;         // Face box smoothing cutoff (LOWERED for much more smoothing)
+    public double faceBeta = 0.01;                // Face box speed coef (LOWERED significantly for very smooth movement)
     
     // Additional display smoothing (simple exponential moving average)
     // Applied AFTER 1-Euro filter for ultra-stable display values

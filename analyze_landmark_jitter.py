@@ -21,20 +21,37 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-def load_input_images(input_images_dir):
-    """Load all input images from the directory"""
-    images = []
-    filenames = sorted([f for f in os.listdir(input_images_dir) if f.endswith('.png')])
+def load_gaze_inputs(left_eye_dir, right_eye_dir, face_dir):
+    """Load all gaze model input images from the directories"""
+    left_eye_images = []
+    right_eye_images = []
+    face_images = []
     
-    for filename in filenames:
-        img_path = os.path.join(input_images_dir, filename)
+    # Load left eye images
+    left_filenames = sorted([f for f in os.listdir(left_eye_dir) if f.endswith('.png')])
+    for filename in left_filenames:
+        img_path = os.path.join(left_eye_dir, filename)
         img = np.array(Image.open(img_path))
-        images.append(img)
+        left_eye_images.append(img)
     
-    return images, filenames
+    # Load right eye images
+    right_filenames = sorted([f for f in os.listdir(right_eye_dir) if f.endswith('.png')])
+    for filename in right_filenames:
+        img_path = os.path.join(right_eye_dir, filename)
+        img = np.array(Image.open(img_path))
+        right_eye_images.append(img)
+    
+    # Load face images
+    face_filenames = sorted([f for f in os.listdir(face_dir) if f.endswith('.png')])
+    for filename in face_filenames:
+        img_path = os.path.join(face_dir, filename)
+        img = np.array(Image.open(img_path))
+        face_images.append(img)
+    
+    return left_eye_images, right_eye_images, face_images
 
-def analyze_input_stability(images):
-    """Analyze how stable the input images are"""
+def analyze_input_stability(images, region_name):
+    """Analyze how stable the input images are for a specific region"""
     if len(images) < 2:
         return None
     
@@ -55,6 +72,7 @@ def analyze_input_stability(images):
     max_frame_diff = np.max(frame_diffs)
     
     return {
+        'region': region_name,
         'mean_pixel_variance': mean_variance,
         'max_pixel_variance': max_variance,
         'mean_frame_diff': mean_frame_diff,
@@ -112,22 +130,25 @@ def analyze_landmark_jitter(landmarks):
         'num_frames': len(landmarks)
     }
 
-def plot_results(input_stats, landmark_stats, output_dir):
+def plot_results(input_stats_dict, landmark_stats, output_dir):
     """Create visualization plots"""
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     
-    # Plot 1: Input image variance heatmap
-    if input_stats:
+    # Plot 1: Gaze input stability summary
+    if input_stats_dict:
         ax = axes[0, 0]
-        ax.text(0.5, 0.5, f"Input Stability:\n"
-                          f"Mean Pixel Variance: {input_stats['mean_pixel_variance']:.2f}\n"
-                          f"Max Pixel Variance: {input_stats['max_pixel_variance']:.2f}\n"
-                          f"Mean Frame Diff: {input_stats['mean_frame_diff']:.2f}\n"
-                          f"Max Frame Diff: {input_stats['max_frame_diff']:.2f}\n"
-                          f"Frames: {input_stats['num_frames']}",
-                ha='center', va='center', fontsize=12,
+        stats_text = "Gaze Model Input Stability:\n\n"
+        for region_name, stats in input_stats_dict.items():
+            stats_text += f"{region_name.upper()}:\n"
+            stats_text += f"  Mean Pixel Variance: {stats['mean_pixel_variance']:.2f}\n"
+            stats_text += f"  Max Pixel Variance: {stats['max_pixel_variance']:.2f}\n"
+            stats_text += f"  Mean Frame Diff: {stats['mean_frame_diff']:.2f}\n"
+            stats_text += f"  Max Frame Diff: {stats['max_frame_diff']:.2f}\n\n"
+        stats_text += f"Frames: {list(input_stats_dict.values())[0]['num_frames']}"
+        ax.text(0.5, 0.5, stats_text,
+                ha='center', va='center', fontsize=10,
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-        ax.set_title('Input Image Stability')
+        ax.set_title('Gaze Model Input Stability')
         ax.axis('off')
     
     # Plot 2: Landmark jitter summary
@@ -187,28 +208,59 @@ def main():
         print(f"Error: Directory not found: {log_dir}")
         sys.exit(1)
     
-    input_images_dir = os.path.join(log_dir, 'input_images')
+    left_eye_dir = os.path.join(log_dir, 'left_eye')
+    right_eye_dir = os.path.join(log_dir, 'right_eye')
+    face_dir = os.path.join(log_dir, 'face')
     csv_file = os.path.join(log_dir, 'landmark_outputs.csv')
     
-    if not os.path.exists(input_images_dir):
-        print(f"Error: Input images directory not found: {input_images_dir}")
+    if not os.path.exists(left_eye_dir):
+        print(f"Error: Left eye directory not found: {left_eye_dir}")
         sys.exit(1)
-    
+    if not os.path.exists(right_eye_dir):
+        print(f"Error: Right eye directory not found: {right_eye_dir}")
+        sys.exit(1)
+    if not os.path.exists(face_dir):
+        print(f"Error: Face directory not found: {face_dir}")
+        sys.exit(1)
     if not os.path.exists(csv_file):
         print(f"Error: Landmark outputs CSV not found: {csv_file}")
         sys.exit(1)
     
-    print("Loading input images...")
-    images, filenames = load_input_images(input_images_dir)
-    print(f"Loaded {len(images)} input images")
+    print("Loading gaze model inputs...")
+    left_eye_images, right_eye_images, face_images = load_gaze_inputs(left_eye_dir, right_eye_dir, face_dir)
+    print(f"Loaded {len(left_eye_images)} left eye images")
+    print(f"Loaded {len(right_eye_images)} right eye images")
+    print(f"Loaded {len(face_images)} face images")
     
-    print("Analyzing input stability...")
-    input_stats = analyze_input_stability(images)
-    if input_stats:
-        print(f"  Mean pixel variance: {input_stats['mean_pixel_variance']:.2f}")
-        print(f"  Max pixel variance: {input_stats['max_pixel_variance']:.2f}")
-        print(f"  Mean frame difference: {input_stats['mean_frame_diff']:.2f}")
-        print(f"  Max frame difference: {input_stats['max_frame_diff']:.2f}")
+    print("\nAnalyzing input stability...")
+    input_stats_dict = {}
+    
+    left_stats = analyze_input_stability(left_eye_images, 'left_eye')
+    if left_stats:
+        input_stats_dict['left_eye'] = left_stats
+        print(f"\nLeft Eye:")
+        print(f"  Mean pixel variance: {left_stats['mean_pixel_variance']:.2f}")
+        print(f"  Max pixel variance: {left_stats['max_pixel_variance']:.2f}")
+        print(f"  Mean frame difference: {left_stats['mean_frame_diff']:.2f}")
+        print(f"  Max frame difference: {left_stats['max_frame_diff']:.2f}")
+    
+    right_stats = analyze_input_stability(right_eye_images, 'right_eye')
+    if right_stats:
+        input_stats_dict['right_eye'] = right_stats
+        print(f"\nRight Eye:")
+        print(f"  Mean pixel variance: {right_stats['mean_pixel_variance']:.2f}")
+        print(f"  Max pixel variance: {right_stats['max_pixel_variance']:.2f}")
+        print(f"  Mean frame difference: {right_stats['mean_frame_diff']:.2f}")
+        print(f"  Max frame difference: {right_stats['max_frame_diff']:.2f}")
+    
+    face_stats = analyze_input_stability(face_images, 'face')
+    if face_stats:
+        input_stats_dict['face'] = face_stats
+        print(f"\nFace:")
+        print(f"  Mean pixel variance: {face_stats['mean_pixel_variance']:.2f}")
+        print(f"  Max pixel variance: {face_stats['max_pixel_variance']:.2f}")
+        print(f"  Mean frame difference: {face_stats['mean_frame_diff']:.2f}")
+        print(f"  Max frame difference: {face_stats['max_frame_diff']:.2f}")
     
     print("\nLoading landmark outputs...")
     landmarks, timestamps = load_landmark_outputs(csv_file)
@@ -223,10 +275,13 @@ def main():
         print(f"  Max frame difference: {landmark_stats['overall_max_frame_diff']:.4f}")
     
     print("\nGenerating plots...")
-    plot_results(input_stats, landmark_stats, log_dir)
+    plot_results(input_stats_dict, landmark_stats, log_dir)
     
     print("\n=== Summary ===")
-    print(f"Input Stability: {'STABLE' if input_stats and input_stats['mean_frame_diff'] < 5.0 else 'UNSTABLE'}")
+    if input_stats_dict:
+        for region_name, stats in input_stats_dict.items():
+            stability = 'STABLE' if stats['mean_frame_diff'] < 5.0 else 'UNSTABLE'
+            print(f"{region_name.upper()} Stability: {stability} (mean diff: {stats['mean_frame_diff']:.2f})")
     print(f"Landmark Jitter: {'LOW' if landmark_stats and landmark_stats['overall_std'] < 1.0 else 'HIGH'}")
     print(f"\nFull analysis saved to: {log_dir}")
 

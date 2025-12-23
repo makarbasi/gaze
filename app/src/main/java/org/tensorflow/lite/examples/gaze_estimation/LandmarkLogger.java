@@ -16,9 +16,11 @@ import java.text.DecimalFormatSymbols;
 import java.util.Locale;
 
 /**
- * Logger for landmark model input and output
+ * Logger for gaze estimation model inputs (left eye, right eye, face) and landmark outputs
  * Saves:
- * - Input images (112x112 RGB) as PNG files
+ * - Left eye images (60x60 RGB) as PNG files
+ * - Right eye images (60x60 RGB) as PNG files
+ * - Face images (120x120 RGB) as PNG files
  * - Output landmarks as CSV file
  */
 public class LandmarkLogger {
@@ -30,7 +32,9 @@ public class LandmarkLogger {
     
     private BufferedWriter landmarkOutputWriter = null;
     private File landmarkOutputFile = null;
-    private File inputImagesDir = null;
+    private File leftEyeDir = null;
+    private File rightEyeDir = null;
+    private File faceDir = null;
     
     private DecimalFormat df;
     
@@ -44,11 +48,13 @@ public class LandmarkLogger {
             sessionDir.mkdirs();
         }
         
-        // Create directory for input images
-        inputImagesDir = new File(sessionDir, "input_images");
-        if (!inputImagesDir.exists()) {
-            inputImagesDir.mkdirs();
-        }
+        // Create directories for gaze model inputs
+        leftEyeDir = new File(sessionDir, "left_eye");
+        rightEyeDir = new File(sessionDir, "right_eye");
+        faceDir = new File(sessionDir, "face");
+        if (!leftEyeDir.exists()) leftEyeDir.mkdirs();
+        if (!rightEyeDir.exists()) rightEyeDir.mkdirs();
+        if (!faceDir.exists()) faceDir.mkdirs();
         
         // Create CSV file for landmark outputs
         landmarkOutputFile = new File(sessionDir, "landmark_outputs.csv");
@@ -70,41 +76,44 @@ public class LandmarkLogger {
     }
     
     /**
-     * Log a frame's input image and output landmarks
-     * @param inputImage Float array of 112x112x3 RGB values (normalized 0-1)
-     * @param outputLandmarks Float array of landmark output values
+     * Log gaze model inputs (left eye, right eye, face) and landmark output
+     * @param leftEye Float array of 60x60x3 RGB values (normalized 0-1)
+     * @param rightEye Float array of 60x60x3 RGB values (normalized 0-1)
+     * @param face Float array of 120x120x3 RGB values (normalized 0-1)
+     * @param landmarks Float array of landmark output values (optional, can be null)
      * @param timestampMs Time since logging started in milliseconds
      */
-    public void logFrame(float[] inputImage, float[] outputLandmarks, long timestampMs) {
+    public void logGazeInputs(float[] leftEye, float[] rightEye, float[] face, float[] landmarks, long timestampMs) {
         try {
             frameCount++;
             
-            // Save input image as PNG
-            saveInputImage(inputImage, frameCount);
+            // Save gaze model inputs as PNG
+            saveEyeImage(leftEye, 60, 60, leftEyeDir, "left_eye", frameCount);
+            saveEyeImage(rightEye, 60, 60, rightEyeDir, "right_eye", frameCount);
+            saveEyeImage(face, 120, 120, faceDir, "face", frameCount);
             
-            // Save landmark output to CSV
-            saveLandmarkOutput(outputLandmarks, frameCount, timestampMs);
+            // Save landmark output to CSV if provided
+            if (landmarks != null) {
+                saveLandmarkOutput(landmarks, frameCount, timestampMs);
+            }
             
         } catch (Exception e) {
-            Log.e(TAG, "Error logging frame " + frameCount + ": " + e.getMessage());
+            Log.e(TAG, "Error logging gaze inputs for frame " + frameCount + ": " + e.getMessage());
             e.printStackTrace();
         }
     }
     
     /**
-     * Convert float array (112x112x3, normalized 0-1) to Bitmap and save as PNG
+     * Convert float array (normalized 0-1) to Bitmap and save as PNG
      */
-    private void saveInputImage(float[] inputImage, int frameNumber) throws IOException {
-        // Create bitmap from float array
-        int width = 112;
-        int height = 112;
+    private void saveEyeImage(float[] imageData, int width, int height, File outputDir, String prefix, int frameNumber) throws IOException {
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         
         int[] pixels = new int[width * height];
         for (int i = 0; i < pixels.length; i++) {
-            float r = inputImage[i * 3] * 255.0f;
-            float g = inputImage[i * 3 + 1] * 255.0f;
-            float b = inputImage[i * 3 + 2] * 255.0f;
+            float r = imageData[i * 3] * 255.0f;
+            float g = imageData[i * 3 + 1] * 255.0f;
+            float b = imageData[i * 3 + 2] * 255.0f;
             
             int rInt = Math.max(0, Math.min(255, (int)r));
             int gInt = Math.max(0, Math.min(255, (int)g));
@@ -115,8 +124,8 @@ public class LandmarkLogger {
         bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
         
         // Save as PNG
-        String filename = String.format(Locale.US, "input_frame_%04d.png", frameNumber);
-        File imageFile = new File(inputImagesDir, filename);
+        String filename = String.format(Locale.US, "%s_frame_%04d.png", prefix, frameNumber);
+        File imageFile = new File(outputDir, filename);
         
         java.io.FileOutputStream out = new java.io.FileOutputStream(imageFile);
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);

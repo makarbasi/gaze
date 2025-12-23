@@ -1170,16 +1170,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           tLmInfMs += (SystemClock.uptimeMillis() - inferStartTime);
         }
         
-        // Log landmark input and output if logging is active
-        if (isLoggingLandmarks && landmarkLogger != null && NNoutput != null) {
-          long currentTime = SystemClock.uptimeMillis();
-          if (currentTime - landmarkLoggingStartTime < LANDMARK_LOGGING_DURATION_MS) {
-            landmarkLogger.logFrame(landmark_detection_input, NNoutput, currentTime - landmarkLoggingStartTime);
-          } else {
-            // Stop logging after 3 seconds
-            stopLandmarkLogging();
-          }
-        }
+        // Note: Landmark output will be logged when we log gaze inputs (to keep frame numbers in sync)
         
         if (NNoutput != null) {
             if (!minimalMode) {
@@ -1207,6 +1198,23 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             rvecs.addElement(gaze_preprocess_result.rvec);
             tvecs.addElement(gaze_preprocess_result.tvec);
             camera_matrix = gaze_preprocess_result.camera_matrix;
+            
+            // Log gaze model inputs (left eye, right eye, face) and landmark output if logging is active
+            if (isLoggingLandmarks && landmarkLogger != null && NNoutput != null) {
+              long currentTime = SystemClock.uptimeMillis();
+              if (currentTime - landmarkLoggingStartTime < LANDMARK_LOGGING_DURATION_MS) {
+                landmarkLogger.logGazeInputs(
+                  gaze_preprocess_result.leye,
+                  gaze_preprocess_result.reye,
+                  gaze_preprocess_result.face,
+                  NNoutput,
+                  currentTime - landmarkLoggingStartTime
+                );
+              } else {
+                // Stop logging after 3 seconds
+                stopLandmarkLogging();
+              }
+            }
             
             // Prepare multi-input for gaze estimation
             String[] inputNames = {"left_eye", "right_eye", "face"};

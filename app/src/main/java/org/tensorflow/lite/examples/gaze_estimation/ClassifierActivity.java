@@ -994,17 +994,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       smoother_list.autoclean();
       smoother_list.match(boxes);
 
-      // smooth face bbox
-      for (int b=0;b<boxes.length;b++) {
-        double[] bbox = new double[4];
-        for (int ii=0;ii<4;ii++)
-          bbox[ii] = (double)boxes[b][ii];
-        // Log.d("SMOOTH_DEBUG_BEFORE", bbox[0] + " " + bbox[1] + " " + bbox[2] + " " + bbox[3]);
-        bbox = smoother_list.smooth(bbox, b, CURRENT_TIMESTAMP);
-        // Log.d("SMOOTH_DEBUG_AFTER", bbox[0] + " " + bbox[1] + " " + bbox[2] + " " + bbox[3]);
-        for (int ii=0;ii<4;ii++)
-          boxes[b][ii] = (float)bbox[ii];
-      }
+      // Note: We skip smoothing the face detection boxes here and instead smooth
+      // the final 112x112 bounding boxes after landmark preprocessing for better stability
 
       for (int b=0;b<boxes.length;b++) {
         float[] box = boxes[b];
@@ -1032,6 +1023,14 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         box[1] = landmark_preprocess_result.y1;
         box[2] = landmark_preprocess_result.x1 + landmark_preprocess_result.size;
         box[3] = landmark_preprocess_result.y1 + landmark_preprocess_result.size;
+        
+        // Smooth the updated 112x112 bounding box coordinates to reduce jitter
+        double[] smoothed_bbox = new double[4];
+        for (int ii=0;ii<4;ii++)
+          smoothed_bbox[ii] = (double)box[ii];
+        smoothed_bbox = smoother_list.smooth(smoothed_bbox, b, CURRENT_TIMESTAMP);
+        for (int ii=0;ii<4;ii++)
+          box[ii] = (float)smoothed_bbox[ii];
         
         // Apply fisheye correction to the face crop if enabled
         if (fisheyeUiEnabled && displayConfig.fisheyeEnabled) {

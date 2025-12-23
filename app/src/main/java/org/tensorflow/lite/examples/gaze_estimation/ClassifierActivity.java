@@ -1027,6 +1027,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
           tLmPreMs += (SystemClock.uptimeMillis() - lmPreStartMs);
         }
         
+        // Update box to show the actual 112x112 bounding box used for landmark detection
+        box[0] = landmark_preprocess_result.x1;
+        box[1] = landmark_preprocess_result.y1;
+        box[2] = landmark_preprocess_result.x1 + landmark_preprocess_result.size;
+        box[3] = landmark_preprocess_result.y1 + landmark_preprocess_result.size;
+        
         // Apply fisheye correction to the face crop if enabled
         if (fisheyeUiEnabled && displayConfig.fisheyeEnabled) {
           // The landmark input is a 112x112x3 float array, convert to bitmap, correct, convert back

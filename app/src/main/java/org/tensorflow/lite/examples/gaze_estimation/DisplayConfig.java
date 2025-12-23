@@ -92,10 +92,10 @@ public class DisplayConfig {
     // Smoothing parameters for 1-Euro filter (lower values = more smoothing, less reactive)
     // min_cutoff: Minimum cutoff frequency (Hz). Lower = smoother but more lag
     // beta: Speed coefficient. Higher = faster response but more jitter
-    public double landmarkMinCutoff = 0.01;      // Landmark smoothing cutoff (default 0.01)
-    public double landmarkBeta = 0.05;           // Landmark speed coef (LOWERED from 0.1 - less jitter)
-    public double gazeMinCutoff = 0.01;          // Gaze smoothing cutoff (default 0.01)
-    public double gazeBeta = 0.1;                // Gaze speed coef (LOWERED from 0.8 - much less jitter!)
+    public double landmarkMinCutoff = 0.001;     // Landmark smoothing cutoff (MUCH LOWERED for very aggressive smoothing)
+    public double landmarkBeta = 0.005;          // Landmark speed coef (MUCH LOWERED for minimal jitter)
+    public double gazeMinCutoff = 0.001;         // Gaze smoothing cutoff (MUCH LOWERED for very aggressive smoothing)
+    public double gazeBeta = 0.005;              // Gaze speed coef (MUCH LOWERED for minimal jitter)
     public double faceMinCutoff = 0.005;         // Face box smoothing cutoff (LOWERED for much more smoothing)
     public double faceBeta = 0.01;                // Face box speed coef (LOWERED significantly for very smooth movement)
     

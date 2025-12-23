@@ -182,6 +182,18 @@
             android:textColor="@android:color/black"
             android:elevation="4dp" />
 
+        <!-- Landmark logging button -->
+        <Button
+            android:id="@+id/log_landmark_button"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="4dp"
+            android:text="📊 Log Landmark I/O (3s)"
+            android:textSize="13sp"
+            android:backgroundTint="#DD2196F3"
+            android:textColor="@android:color/white"
+            android:elevation="4dp" />
+
         <!-- Per-frame Looking/Not-Looking probabilities (shown under calibrate button) -->
         <TextView
             android:id="@+id/looking_prob_text"

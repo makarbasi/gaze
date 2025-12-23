@@ -169,6 +169,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     gazeOverlay = findViewById(R.id.gaze_overlay);
     gazeStatusText = findViewById(R.id.gaze_status_text);
     calibrateButton = findViewById(R.id.calibrate_button);
+    logLandmarkButton = findViewById(R.id.log_landmark_button);
     lookingProbText = findViewById(R.id.looking_prob_text);
     headPosePitchText = findViewById(R.id.head_pose_pitch);
     headPoseYawText = findViewById(R.id.head_pose_yaw);
@@ -290,6 +291,16 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             // Stop recording
             stopRecording();
           }
+        }
+      });
+    }
+    
+    // Initialize landmark logging button
+    if (logLandmarkButton != null) {
+      logLandmarkButton.setOnClickListener(new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          startLandmarkLogging();
         }
       });
     }
@@ -422,6 +433,80 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
     recordButton.setText("⏺ Record");
     recordButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xDDFF5722));
     currentRecordingFile = null;
+  }
+  
+  /**
+   * Start logging landmark model input and output for 3 seconds
+   */
+  private void startLandmarkLogging() {
+    if (isLoggingLandmarks) {
+      return; // Already logging
+    }
+    
+    try {
+      // Create output directory
+      java.io.File outputDir = new java.io.File(getExternalFilesDir(null), "landmark_logs");
+      if (!outputDir.exists()) {
+        outputDir.mkdirs();
+      }
+      
+      // Create logger with timestamp
+      String timestamp = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(new java.util.Date());
+      landmarkLogger = new LandmarkLogger(outputDir, timestamp);
+      
+      isLoggingLandmarks = true;
+      landmarkLoggingStartTime = SystemClock.uptimeMillis();
+      
+      // Update button
+      if (logLandmarkButton != null) {
+        logLandmarkButton.setText("📊 Logging... (3s)");
+        logLandmarkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xDD4CAF50));
+        logLandmarkButton.setEnabled(false);
+      }
+      
+      Log.i("LandmarkLogging", "Started logging landmark I/O for 3 seconds");
+    } catch (Exception e) {
+      Log.e("LandmarkLogging", "Failed to start logging: " + e.getMessage());
+      e.printStackTrace();
+    }
+  }
+  
+  /**
+   * Stop logging landmark model input and output
+   */
+  private void stopLandmarkLogging() {
+    if (!isLoggingLandmarks) {
+      return;
+    }
+    
+    try {
+      if (landmarkLogger != null) {
+        landmarkLogger.close();
+        String logPath = landmarkLogger.getLogPath();
+        Log.i("LandmarkLogging", "Stopped logging. Files saved to: " + logPath);
+        
+        // Show toast with file location
+        runOnUiThread(() -> {
+          android.widget.Toast.makeText(this, 
+            "Landmark logs saved to:\n" + logPath, 
+            android.widget.Toast.LENGTH_LONG).show();
+        });
+        
+        landmarkLogger = null;
+      }
+      
+      isLoggingLandmarks = false;
+      
+      // Update button
+      if (logLandmarkButton != null) {
+        logLandmarkButton.setText("📊 Log Landmark I/O (3s)");
+        logLandmarkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xDD2196F3));
+        logLandmarkButton.setEnabled(true);
+      }
+    } catch (Exception e) {
+      Log.e("LandmarkLogging", "Failed to stop logging: " + e.getMessage());
+      e.printStackTrace();
+    }
   }
   
   /**
@@ -755,6 +840,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private TextView gazeStatusText;
   private TextView lookingProbText;
   private Button calibrateButton;
+  private Button logLandmarkButton;
   
   // Recording UI and state
   private Button recordButton;
@@ -762,6 +848,12 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   private boolean isRecording = false;
   private BufferedWriter recordingWriter = null;
   private String currentRecordingFile = null;
+  
+  // Landmark logging state
+  private boolean isLoggingLandmarks = false;
+  private long landmarkLoggingStartTime = 0;
+  private static final long LANDMARK_LOGGING_DURATION_MS = 3000; // 3 seconds
+  private LandmarkLogger landmarkLogger = null;
   @Override
 
   protected Bitmap processImage() {
@@ -1076,6 +1168,17 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
         inferencetime += SystemClock.uptimeMillis() - inferStartTime;
         if (perfLogs) {
           tLmInfMs += (SystemClock.uptimeMillis() - inferStartTime);
+        }
+        
+        // Log landmark input and output if logging is active
+        if (isLoggingLandmarks && landmarkLogger != null && NNoutput != null) {
+          long currentTime = SystemClock.uptimeMillis();
+          if (currentTime - landmarkLoggingStartTime < LANDMARK_LOGGING_DURATION_MS) {
+            landmarkLogger.logFrame(landmark_detection_input, NNoutput, currentTime - landmarkLoggingStartTime);
+          } else {
+            // Stop logging after 3 seconds
+            stopLandmarkLogging();
+          }
         }
         
         if (NNoutput != null) {

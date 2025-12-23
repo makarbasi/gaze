@@ -1302,8 +1302,8 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             Mat smoothedTvec = gaze_preprocess_result.tvec.clone(); // tvec smoothing can be added later if needed
             
             // Re-extract eye/face crops using smoothed head pose for stability
-            Mat camera_matrix = GazeEstimationUtils.get_camera_matrix(DemoConfig.crop_W, DemoConfig.crop_H);
-            java.util.List smoothedData = GazeEstimationUtils.normalizeDataForInference(img, smoothedRvec, smoothedTvec, camera_matrix);
+            Mat smoothedCameraMatrix = gaze_preprocess_result.camera_matrix.clone();
+            java.util.List smoothedData = GazeEstimationUtils.normalizeDataForInference(img, smoothedRvec, smoothedTvec, smoothedCameraMatrix);
             float[] leye_image = ProcessFactory.mat2array((Mat)smoothedData.get(0));
             float[] reye_image = ProcessFactory.mat2array((Mat)smoothedData.get(1));
             float[] face_image = ProcessFactory.mat2array((Mat)smoothedData.get(2));
@@ -1322,7 +1322,7 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
             }
             rvecs.addElement(gaze_preprocess_result.rvec);
             tvecs.addElement(gaze_preprocess_result.tvec);
-            camera_matrix = gaze_preprocess_result.camera_matrix;
+            camera_matrix = gaze_preprocess_result.camera_matrix; // Update class variable
             
             // Log gaze model inputs (left eye, right eye, face) and landmark output if logging is active
             if (isLoggingLandmarks && landmarkLogger != null && NNoutput != null) {

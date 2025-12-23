@@ -82,7 +82,8 @@ public class ProcessFactory {
         int cx = x1 + w / 2;
         int cy = y1 + h / 2;
 
-        int size = (int)(Math.max(w, h) * 1.15);
+        // Fixed size bounding box matching landmark model input size (112x112)
+        int size = 112;
         x1 = cx - size / 2;
         x2 = x1 + size;
         y1 = cy - size / 2;

@@ -109,6 +109,11 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // Store initial bounding box positions (frozen after first detection)
   private java.util.Map<Integer, float[]> initialBoundingBoxes = new java.util.HashMap<>();
   
+  // Store smoothed head pose (rvec/tvec) for each face to stabilize eye/face crop extraction
+  private java.util.Map<Integer, Mat> smoothedRvecs = new java.util.HashMap<>();
+  private java.util.Map<Integer, Mat> smoothedTvecs = new java.util.HashMap<>();
+  private java.util.Map<Integer, double[]> smoothedHeadPoseAngles = new java.util.HashMap<>(); // pitch, yaw, roll
+  
   // TFLite Face Detector (from HotGaze - more accurate)
   private TFLiteFaceDetector tfliteFaceDetector = null;
   
@@ -507,6 +512,83 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       Log.e("LandmarkLogging", "Failed to stop logging: " + e.getMessage());
       e.printStackTrace();
     }
+  }
+  
+  /**
+   * Smooth head pose by smoothing Euler angles and converting back to rvec
+   * This stabilizes eye/face crop extraction
+   */
+  private Mat smoothHeadPose(Mat rvec, int smootherId, int faceId, double timestamp) {
+    try {
+      // Extract Euler angles from rvec
+      float[] eulerAngles = extractHeadPose(rvec);
+      
+      // Smooth the Euler angles
+      double[] eulerAnglesDouble = new double[3];
+      for (int i = 0; i < 3; i++) {
+        eulerAnglesDouble[i] = (double)eulerAngles[i];
+      }
+      
+      // Use aggressive exponential smoothing for head pose to stabilize eye/face crops
+      // Lower alpha = more smoothing (very aggressive to reduce eye crop jitter)
+      double[] smoothedAngles;
+      if (smoothedHeadPoseAngles.containsKey(smootherId)) {
+        // Apply very aggressive exponential smoothing
+        double alpha = 0.05; // Very low = much more smoothing (was 0.1, now 0.05 for stability)
+        double[] prevAngles = smoothedHeadPoseAngles.get(smootherId);
+        smoothedAngles = new double[3];
+        for (int i = 0; i < 3; i++) {
+          smoothedAngles[i] = alpha * eulerAnglesDouble[i] + (1 - alpha) * prevAngles[i];
+        }
+      } else {
+        // First frame: use current angles
+        smoothedAngles = eulerAnglesDouble;
+      }
+      smoothedHeadPoseAngles.put(smootherId, smoothedAngles);
+      
+      // Convert smoothed Euler angles back to rotation vector
+      Mat smoothedRvec = eulerAnglesToRvec(
+        (float)smoothedAngles[0], // pitch
+        (float)smoothedAngles[1], // yaw
+        (float)smoothedAngles[2]  // roll
+      );
+      
+      return smoothedRvec;
+    } catch (Exception e) {
+      Log.e("HeadPoseSmoothing", "Error smoothing head pose: " + e.getMessage());
+      return rvec; // Return original if smoothing fails
+    }
+  }
+  
+  /**
+   * Convert Euler angles (pitch, yaw, roll) to rotation vector
+   */
+  private Mat eulerAnglesToRvec(float pitch, float yaw, float roll) {
+    // Create rotation matrix from Euler angles
+    // R = Rz(yaw) * Ry(pitch) * Rx(roll)
+    double cp = Math.cos(pitch);
+    double sp = Math.sin(pitch);
+    double cy = Math.cos(yaw);
+    double sy = Math.sin(yaw);
+    double cr = Math.cos(roll);
+    double sr = Math.sin(roll);
+    
+    // Rotation matrix
+    double[] rotMatData = {
+      cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr,
+      sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr,
+      -sp, cp * sr, cp * cr
+    };
+    
+    Mat rotMat = new Mat(3, 3, org.opencv.core.CvType.CV_64FC1);
+    rotMat.put(0, 0, rotMatData);
+    
+    // Convert rotation matrix to rotation vector
+    Mat rvec = new Mat();
+    org.opencv.calib3d.Calib3d.Rodrigues(rotMat, rvec);
+    rotMat.release();
+    
+    return rvec;
   }
   
   /**
@@ -1089,13 +1171,33 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
       smoother_list.autoclean();
       smoother_list.match(boxes);
       
-      // Clean up initial bounding boxes for faces that are no longer detected
+      // Clean up initial bounding boxes and smoothed head poses for faces that are no longer detected
       // Remove entries for smoother IDs that no longer exist (after match, so we know current smoothers)
       java.util.Set<Integer> activeSmootherIds = new java.util.HashSet<>();
       for (int i = 0; i < smoother_list.smoothers.size(); i++) {
         activeSmootherIds.add(i);
       }
       initialBoundingBoxes.entrySet().removeIf(entry -> !activeSmootherIds.contains(entry.getKey()));
+      smoothedHeadPoseAngles.entrySet().removeIf(entry -> !activeSmootherIds.contains(entry.getKey()));
+      // Release Mat objects for removed faces
+      smoothedRvecs.entrySet().removeIf(entry -> {
+        if (!activeSmootherIds.contains(entry.getKey())) {
+          if (entry.getValue() != null) {
+            entry.getValue().release();
+          }
+          return true;
+        }
+        return false;
+      });
+      smoothedTvecs.entrySet().removeIf(entry -> {
+        if (!activeSmootherIds.contains(entry.getKey())) {
+          if (entry.getValue() != null) {
+            entry.getValue().release();
+          }
+          return true;
+        }
+        return false;
+      });
 
       // Note: We skip smoothing the face detection boxes here and instead smooth
       // the final 112x112 bounding boxes after landmark preprocessing for better stability
@@ -1191,7 +1293,30 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
 
             // ==== GAZE ESTIMATION with QNN ====
             final long gazePreStartMs = perfLogs ? SystemClock.uptimeMillis() : 0L;
+            
+            // Get initial head pose
             ProcessFactory.GazePreprocessResult gaze_preprocess_result = gaze_preprocess(img, landmark);
+            
+            // Smooth head pose to stabilize eye/face crop extraction
+            Mat smoothedRvec = smoothHeadPose(gaze_preprocess_result.rvec, smootherId, b, CURRENT_TIMESTAMP);
+            Mat smoothedTvec = gaze_preprocess_result.tvec.clone(); // tvec smoothing can be added later if needed
+            
+            // Re-extract eye/face crops using smoothed head pose for stability
+            Mat camera_matrix = GazeEstimationUtils.get_camera_matrix(DemoConfig.crop_W, DemoConfig.crop_H);
+            java.util.List smoothedData = GazeEstimationUtils.normalizeDataForInference(img, smoothedRvec, smoothedTvec, camera_matrix);
+            float[] leye_image = ProcessFactory.mat2array((Mat)smoothedData.get(0));
+            float[] reye_image = ProcessFactory.mat2array((Mat)smoothedData.get(1));
+            float[] face_image = ProcessFactory.mat2array((Mat)smoothedData.get(2));
+            Mat R = (Mat)smoothedData.get(3);
+            
+            // Update gaze_preprocess_result with smoothed crops
+            gaze_preprocess_result.leye = leye_image;
+            gaze_preprocess_result.reye = reye_image;
+            gaze_preprocess_result.face = face_image;
+            gaze_preprocess_result.R = R;
+            gaze_preprocess_result.rvec = smoothedRvec;
+            gaze_preprocess_result.tvec = smoothedTvec;
+            
             if (perfLogs) {
               tGazePreMs += (SystemClock.uptimeMillis() - gazePreStartMs);
             }

@@ -77,6 +77,8 @@ public abstract class CameraActivity extends AppCompatActivity
   private static final int PERMISSIONS_REQUEST = 1;
 
   private static final String PERMISSION_CAMERA = Manifest.permission.CAMERA;
+  /** Optional intent extra: force a specific Camera2 cameraId. */
+  public static final String EXTRA_CAMERA_ID = "extra_camera_id";
   protected int previewWidth = 0;
   protected int previewHeight = 0;
   private Handler handler;
@@ -703,6 +705,19 @@ public abstract class CameraActivity extends AppCompatActivity
   private String chooseCamera() {
     final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
     try {
+      // If caller provided a specific cameraId, prefer it.
+      final String forcedCameraId = getIntent() != null ? getIntent().getStringExtra(EXTRA_CAMERA_ID) : null;
+      if (forcedCameraId != null) {
+        final CameraCharacteristics characteristics = manager.getCameraCharacteristics(forcedCameraId);
+        final StreamConfigurationMap map =
+            characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        if (map != null) {
+          useCamera2API = true;
+          LOGGER.i("Using forced cameraId from intent: %s", forcedCameraId);
+          return forcedCameraId;
+        }
+      }
+
       for (final String cameraId : manager.getCameraIdList()) {
         final CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
 

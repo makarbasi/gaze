@@ -61,6 +61,13 @@
             android:screenOrientation="portrait"
             android:exported="false">
         </activity>
+
+        <!-- Camera Picker Activity - choose camera with previews -->
+        <activity
+            android:name="org.tensorflow.lite.examples.gaze_estimation.CameraPickerActivity"
+            android:label="@string/select_camera_title"
+            android:screenOrientation="portrait"
+            android:exported="false" />
         
     </application>
 </manifest>

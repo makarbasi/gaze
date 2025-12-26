@@ -72,6 +72,22 @@ public class LauncherActivity extends AppCompatActivity {
         cameraButton.setOnClickListener(v -> startCameraMode());
         layout.addView(cameraButton);
         
+        // === Select Camera Button (new) ===
+        Button selectCameraButton = createStyledButton(
+            getString(R.string.select_camera_mode_title),
+            getString(R.string.select_camera_mode_desc),
+            0xFF2A9D8F,
+            0xFF1F7A6E
+        );
+        LinearLayout.LayoutParams selectCamParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        selectCamParams.setMargins(0, 0, 0, 20);
+        selectCameraButton.setLayoutParams(selectCamParams);
+        selectCameraButton.setOnClickListener(v -> startCameraPickerMode());
+        layout.addView(selectCameraButton);
+
         // === Single Image Button ===
         Button singleImageButton = createStyledButton(
             "🖼  Single Image",
@@ -108,6 +124,7 @@ public class LauncherActivity extends AppCompatActivity {
         TextView info = new TextView(this);
         info.setText("\n─────────────────\n\n" +
             "• Live Camera: Use device camera for real-time tracking\n\n" +
+            "• Select Camera: Preview all cameras and choose one\n\n" +
             "• Single Image: Pick one photo to analyze\n\n" +
             "• Batch: Process many images at once");
         info.setTextSize(13);
@@ -144,6 +161,12 @@ public class LauncherActivity extends AppCompatActivity {
     
     private void startCameraMode() {
         Intent intent = new Intent(this, ClassifierActivity.class);
+        startActivity(intent);
+        finish();
+    }
+
+    private void startCameraPickerMode() {
+        Intent intent = new Intent(this, CameraPickerActivity.class);
         startActivity(intent);
         finish();
     }

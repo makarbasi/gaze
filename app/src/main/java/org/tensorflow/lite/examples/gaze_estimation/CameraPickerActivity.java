@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Size;
+import android.view.View;
 import android.view.Surface;
 import android.view.TextureView;
 import android.widget.Button;

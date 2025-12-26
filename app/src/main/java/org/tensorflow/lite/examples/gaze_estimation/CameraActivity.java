@@ -79,6 +79,9 @@ public abstract class CameraActivity extends AppCompatActivity
   private static final String PERMISSION_CAMERA = Manifest.permission.CAMERA;
   /** Optional intent extra: force a specific Camera2 cameraId. */
   public static final String EXTRA_CAMERA_ID = "extra_camera_id";
+  /** Persisted camera selection (set by CameraPickerActivity). */
+  private static final String PREFS_NAME = "gaze_prefs";
+  private static final String PREF_SELECTED_CAMERA_ID = "selected_camera_id";
   protected int previewWidth = 0;
   protected int previewHeight = 0;
   private Handler handler;
@@ -715,6 +718,24 @@ public abstract class CameraActivity extends AppCompatActivity
           useCamera2API = true;
           LOGGER.i("Using forced cameraId from intent: %s", forcedCameraId);
           return forcedCameraId;
+        }
+      }
+
+      // Otherwise, prefer the last-selected camera from CameraPickerActivity (if present).
+      final String persistedCameraId =
+          getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_SELECTED_CAMERA_ID, null);
+      if (persistedCameraId != null) {
+        try {
+          final CameraCharacteristics characteristics = manager.getCameraCharacteristics(persistedCameraId);
+          final StreamConfigurationMap map =
+              characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+          if (map != null) {
+            useCamera2API = true;
+            LOGGER.i("Using persisted cameraId from prefs: %s", persistedCameraId);
+            return persistedCameraId;
+          }
+        } catch (Exception ignored) {
+          // fall through to normal selection
         }
       }
 

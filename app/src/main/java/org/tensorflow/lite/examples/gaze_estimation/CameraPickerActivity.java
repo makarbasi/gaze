@@ -355,6 +355,12 @@ public class CameraPickerActivity extends AppCompatActivity {
       this.overlay = overlay;
     }
 
+    private void setOverlayText(String text) {
+      if (overlay == null) return;
+      // Camera2 callbacks run on background threads; UI updates must go to main thread.
+      overlay.post(() -> overlay.setText(text));
+    }
+
     void start(CameraManager manager, Handler handler) {
       if (cameraDevice != null) return;
       if (textureView == null || !textureView.isAvailable()) return;
@@ -371,7 +377,7 @@ public class CameraPickerActivity extends AppCompatActivity {
                 public void onOpened(@NonNull CameraDevice camera) {
                   cameraOpenCloseLock.release();
                   cameraDevice = camera;
-                  if (overlay != null) overlay.setText("Camera " + cameraId);
+                  setOverlayText("Camera " + cameraId);
                   createPreviewSession(manager, handler);
                 }
 
@@ -380,7 +386,7 @@ public class CameraPickerActivity extends AppCompatActivity {
                   cameraOpenCloseLock.release();
                   camera.close();
                   cameraDevice = null;
-                  if (overlay != null) overlay.setText("Disconnected: " + cameraId);
+                  setOverlayText("Disconnected: " + cameraId);
                 }
 
                 @Override
@@ -388,13 +394,13 @@ public class CameraPickerActivity extends AppCompatActivity {
                   cameraOpenCloseLock.release();
                   camera.close();
                   cameraDevice = null;
-                  if (overlay != null) overlay.setText("Unavailable: " + cameraId);
+                  setOverlayText("Unavailable: " + cameraId);
                 }
               },
               handler);
         } catch (CameraAccessException e) {
           cameraOpenCloseLock.release();
-          if (overlay != null) overlay.setText("Access error: " + cameraId);
+          setOverlayText("Access error: " + cameraId);
         }
       } catch (InterruptedException ignored) {
         cameraOpenCloseLock.release();
@@ -433,12 +439,12 @@ public class CameraPickerActivity extends AppCompatActivity {
 
               @Override
               public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                if (overlay != null) overlay.setText("Preview failed: " + cameraId);
+                setOverlayText("Preview failed: " + cameraId);
               }
             },
             handler);
       } catch (Exception e) {
-        if (overlay != null) overlay.setText("Preview error: " + cameraId);
+        setOverlayText("Preview error: " + cameraId);
       }
     }
 

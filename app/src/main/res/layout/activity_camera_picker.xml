@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:background="@android:color/black">
 
-    <!-- Top controls -->
+    <!-- Top status -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -23,12 +23,6 @@
             android:textColor="@android:color/white"
             android:textSize="16sp"
             android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/camera_picker_use_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/use_this_camera" />
     </LinearLayout>
 
     <!-- List of camera previews -->
@@ -45,5 +39,21 @@
             android:orientation="vertical"
             android:padding="12dp" />
     </ScrollView>
+
+    <!-- Bottom action: keep always visible (hard to miss) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp"
+        android:background="#111111">
+
+        <Button
+            android:id="@+id/camera_picker_use_button"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="@string/use_this_camera"
+            android:textColor="@android:color/white"
+            android:backgroundTint="#2A9D8F" />
+    </LinearLayout>
 
 </LinearLayout>

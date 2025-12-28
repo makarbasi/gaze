@@ -3,7 +3,7 @@
 
     <!-- Camera picker -->
     <string name="select_camera_title">Select Camera</string>
-    <string name="use_this_camera">Use</string>
+    <string name="use_this_camera">Use selected camera</string>
     <string name="camera_preview_label">Preview</string>
     <string name="no_cameras_found">No cameras found</string>
 

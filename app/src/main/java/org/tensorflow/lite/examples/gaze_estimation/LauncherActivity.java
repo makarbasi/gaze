@@ -168,7 +168,7 @@ public class LauncherActivity extends AppCompatActivity {
     private void startCameraPickerMode() {
         Intent intent = new Intent(this, CameraPickerActivity.class);
         startActivity(intent);
-        finish();
+        // Do NOT finish here so the user can press Back to return to this launcher screen.
     }
     
     private void startSingleImageMode() {

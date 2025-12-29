@@ -56,9 +56,9 @@ public class CameraPickerActivity extends AppCompatActivity {
   private static final String PREF_SELECTED_CAMERA_ID = "selected_camera_id";
 
   private Button useButton;
+  private Button backButton;
   private TextView statusText;
   private LinearLayout cameraListContainer;
-  private boolean autoStartOnSelection = false;
 
   private HandlerThread backgroundThread;
   private Handler backgroundHandler;
@@ -83,11 +83,13 @@ public class CameraPickerActivity extends AppCompatActivity {
     setContentView(R.layout.activity_camera_picker);
 
     useButton = findViewById(R.id.camera_picker_use_button);
+    backButton = findViewById(R.id.camera_picker_back_button);
     statusText = findViewById(R.id.camera_picker_status);
     cameraListContainer = findViewById(R.id.camera_picker_list);
 
-    // Some builds/layouts may not include the button; support "tap a camera to start" mode.
-    autoStartOnSelection = (useButton == null);
+    if (backButton != null) {
+      backButton.setOnClickListener(v -> finish());
+    }
 
     if (useButton != null) {
       useButton.setEnabled(false);
@@ -178,7 +180,7 @@ public class CameraPickerActivity extends AppCompatActivity {
     cameraOptions = getAvailableCameraOptions();
     if (cameraOptions.isEmpty()) {
       statusText.setText(getString(R.string.no_cameras_found));
-      useButton.setEnabled(false);
+      if (useButton != null) useButton.setEnabled(false);
       return;
     }
 
@@ -243,11 +245,6 @@ public class CameraPickerActivity extends AppCompatActivity {
               View child = cameraListContainer.getChildAt(j);
               RadioButton rb = child.findViewById(R.id.camera_option_radio);
               if (rb != null) rb.setChecked(j == index);
-            }
-
-            // If the UI doesn't have a "Use" button (or you want one-tap flow), start immediately.
-            if (autoStartOnSelection) {
-              startLiveWithSelectedCamera();
             }
           };
 

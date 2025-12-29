@@ -58,6 +58,7 @@ public class CameraPickerActivity extends AppCompatActivity {
   private Button useButton;
   private TextView statusText;
   private LinearLayout cameraListContainer;
+  private boolean autoStartOnSelection = false;
 
   private HandlerThread backgroundThread;
   private Handler backgroundHandler;
@@ -85,17 +86,13 @@ public class CameraPickerActivity extends AppCompatActivity {
     statusText = findViewById(R.id.camera_picker_status);
     cameraListContainer = findViewById(R.id.camera_picker_list);
 
-    useButton.setEnabled(false);
+    // Some builds/layouts may not include the button; support "tap a camera to start" mode.
+    autoStartOnSelection = (useButton == null);
 
-    useButton.setOnClickListener(
-        v -> {
-          if (selectedCameraId == null) return;
-          persistSelectedCameraId(selectedCameraId);
-          Intent intent = new Intent(this, ClassifierActivity.class);
-          intent.putExtra(EXTRA_CAMERA_ID, selectedCameraId);
-          startActivity(intent);
-          finish();
-        });
+    if (useButton != null) {
+      useButton.setEnabled(false);
+      useButton.setOnClickListener(v -> startLiveWithSelectedCamera());
+    }
 
     if (hasPermission()) {
       loadCameraListAndBindUi();
@@ -197,12 +194,21 @@ public class CameraPickerActivity extends AppCompatActivity {
     }
 
     selectedCameraId = cameraOptions.get(initialIndex).cameraId;
-    useButton.setEnabled(true);
+    if (useButton != null) useButton.setEnabled(true);
     statusText.setText(
         getString(R.string.select_camera_title) + ": " + cameraOptions.get(initialIndex).label);
 
     // Rebuild list UI + previews
     buildCameraListUi(initialIndex);
+  }
+
+  private void startLiveWithSelectedCamera() {
+    if (selectedCameraId == null) return;
+    persistSelectedCameraId(selectedCameraId);
+    Intent intent = new Intent(this, ClassifierActivity.class);
+    intent.putExtra(EXTRA_CAMERA_ID, selectedCameraId);
+    startActivity(intent);
+    finish();
   }
 
   private void buildCameraListUi(int initiallySelectedIndex) {
@@ -230,13 +236,18 @@ public class CameraPickerActivity extends AppCompatActivity {
       View.OnClickListener selectListener =
           v -> {
             selectedCameraId = opt.cameraId;
-            useButton.setEnabled(true);
+            if (useButton != null) useButton.setEnabled(true);
             statusText.setText(getString(R.string.select_camera_title) + ": " + opt.label);
             // Exclusive selection
             for (int j = 0; j < cameraListContainer.getChildCount(); j++) {
               View child = cameraListContainer.getChildAt(j);
               RadioButton rb = child.findViewById(R.id.camera_option_radio);
               if (rb != null) rb.setChecked(j == index);
+            }
+
+            // If the UI doesn't have a "Use" button (or you want one-tap flow), start immediately.
+            if (autoStartOnSelection) {
+              startLiveWithSelectedCamera();
             }
           };
 

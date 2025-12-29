@@ -59,6 +59,7 @@ public class CameraPickerActivity extends AppCompatActivity {
   private Button backButton;
   private TextView statusText;
   private LinearLayout cameraListContainer;
+  private Button inlineSubmitButton;
 
   private HandlerThread backgroundThread;
   private Handler backgroundHandler;
@@ -179,8 +180,9 @@ public class CameraPickerActivity extends AppCompatActivity {
   private void loadCameraListAndBindUi() {
     cameraOptions = getAvailableCameraOptions();
     if (cameraOptions.isEmpty()) {
-      statusText.setText(getString(R.string.no_cameras_found));
+      if (statusText != null) statusText.setText(getString(R.string.no_cameras_found));
       if (useButton != null) useButton.setEnabled(false);
+      if (inlineSubmitButton != null) inlineSubmitButton.setEnabled(false);
       return;
     }
 
@@ -197,8 +199,10 @@ public class CameraPickerActivity extends AppCompatActivity {
 
     selectedCameraId = cameraOptions.get(initialIndex).cameraId;
     if (useButton != null) useButton.setEnabled(true);
-    statusText.setText(
-        getString(R.string.select_camera_title) + ": " + cameraOptions.get(initialIndex).label);
+    if (statusText != null) {
+      statusText.setText(
+          getString(R.string.select_camera_title) + ": " + cameraOptions.get(initialIndex).label);
+    }
 
     // Rebuild list UI + previews
     buildCameraListUi(initialIndex);
@@ -221,6 +225,19 @@ public class CameraPickerActivity extends AppCompatActivity {
 
     final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
 
+    // Always add an in-list action bar (Back + Submit) so controls are visible even if the
+    // activity layout variant doesn't show top/bottom bars.
+    View actions =
+        getLayoutInflater().inflate(R.layout.item_camera_picker_actions, cameraListContainer, false);
+    Button inlineBack = actions.findViewById(R.id.camera_picker_inline_back);
+    inlineSubmitButton = actions.findViewById(R.id.camera_picker_inline_submit);
+    if (inlineBack != null) inlineBack.setOnClickListener(v -> finish());
+    if (inlineSubmitButton != null) {
+      inlineSubmitButton.setEnabled(selectedCameraId != null);
+      inlineSubmitButton.setOnClickListener(v -> startLiveWithSelectedCamera());
+    }
+    cameraListContainer.addView(actions);
+
     for (int i = 0; i < cameraOptions.size(); i++) {
       final int index = i;
       final CameraOption opt = cameraOptions.get(i);
@@ -239,7 +256,10 @@ public class CameraPickerActivity extends AppCompatActivity {
           v -> {
             selectedCameraId = opt.cameraId;
             if (useButton != null) useButton.setEnabled(true);
-            statusText.setText(getString(R.string.select_camera_title) + ": " + opt.label);
+            if (inlineSubmitButton != null) inlineSubmitButton.setEnabled(true);
+            if (statusText != null) {
+              statusText.setText(getString(R.string.select_camera_title) + ": " + opt.label);
+            }
             // Exclusive selection
             for (int j = 0; j < cameraListContainer.getChildCount(); j++) {
               View child = cameraListContainer.getChildAt(j);
